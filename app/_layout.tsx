@@ -1,15 +1,42 @@
 import { Stack, useRouter, useSegments } from "expo-router";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "@/src/contexts/AuthContext";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { View, ActivityIndicator, StyleSheet, Image } from "react-native";
+import * as SplashScreen from "expo-splash-screen";
+import { Colors } from "@/src/config/theme";
+
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   const { isAuthenticated, isLoading, role } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const [appIsReady, setAppIsReady] = useState(false);
 
   useEffect(() => {
-    if (isLoading) return;
+    async function prepare() {
+      try {
+        // Wait for auth to finish loading
+        if (!isLoading) {
+          // Add a minimum splash screen duration for better UX
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          setAppIsReady(true);
+        }
+      } catch (e) {
+        console.warn(e);
+        setAppIsReady(true);
+      } finally {
+        // Hide splash screen once app is ready
+        await SplashScreen.hideAsync();
+      }
+    }
+
+    prepare();
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (!appIsReady || isLoading) return;
 
     const inAuth = segments[0] === "auth";
     const inResponder = segments[0] === "(tabs)" && segments[1] === "responder";
@@ -28,12 +55,17 @@ function RootLayoutNav() {
     } else if (isAuthenticated && role === "community" && !inCommunity) {
       router.replace("/(tabs)/community/home");
     }
-  }, [isAuthenticated, isLoading, role, segments]);
+  }, [isAuthenticated, isLoading, role, segments, appIsReady, router]);
 
-  if (isLoading) {
+  if (!appIsReady || isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <Image
+          source={require("../assets/images/597486658_1215193403858896_2072558280615266887_n.png")}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        <ActivityIndicator size="large" color={Colors.textWhite} style={styles.loader} />
       </View>
     );
   }
@@ -59,6 +91,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: Colors.primary,
+  },
+  logo: {
+    width: 260,
+    height: 110,
+    marginBottom: 32,
+  },
+  loader: {
+    marginTop: 16,
   },
 });

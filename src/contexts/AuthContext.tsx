@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { AuthContextType, User, UserRole, LoginCredentials } from '@/src/types/auth.types';
+import { 
+  AuthContextType, 
+  User, 
+  UserRole, 
+  LoginCredentials, 
+  SignupCredentials,
+  VerificationCredentials,
+  ResendVerificationCredentials
+} from '@/src/types/auth.types';
 import * as authService from '@/src/services/auth.service';
 import { getToken, getUser, getRole } from '@/src/services/storage.service';
 
@@ -41,6 +49,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const signup = async (credentials: SignupCredentials) => {
+    try {
+      await authService.signup(credentials);
+      // Don't set auth state here - wait for email verification
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const verifyEmail = async (credentials: VerificationCredentials) => {
+    try {
+      const response = await authService.verifyEmail(credentials);
+      setToken(response.token);
+      setUser(response.user);
+      setRole(response.role);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const resendVerificationCode = async (credentials: ResendVerificationCredentials) => {
+    try {
+      await authService.resendVerificationCode(credentials);
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const logout = async () => {
     try {
       await authService.logout();
@@ -63,6 +99,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isAuthenticated: !!token && !!user,
     isLoading,
     login,
+    signup,
+    verifyEmail,
+    resendVerificationCode,
     logout,
     restoreAuth,
   };

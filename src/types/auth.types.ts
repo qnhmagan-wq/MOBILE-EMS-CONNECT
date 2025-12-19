@@ -20,14 +20,49 @@ export interface LoginCredentials {
   password: string;
 }
 
+export interface SignupCredentials {
+  first_name: string;
+  last_name: string;
+  username: string;
+  email: string;
+  phone_number: string;
+  password: string;
+  password_confirmation: string;
+}
+
+export interface VerificationCredentials {
+  email: string;
+  code: string;
+}
+
+export interface ResendVerificationCredentials {
+  email: string;
+}
+
 export interface LoginResponse {
   token: string;
   user: User;
   role: UserRole;
 }
 
+export interface SignupResponse {
+  message: string;
+  email: string;
+  requires_verification: boolean;
+}
+
+export interface VerificationResponse {
+  token: string;
+  user: User;
+  role: UserRole;
+  message?: string;
+}
+
 export interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
+  signup: (credentials: SignupCredentials) => Promise<void>;
+  verifyEmail: (credentials: VerificationCredentials) => Promise<void>;
+  resendVerificationCode: (credentials: ResendVerificationCredentials) => Promise<void>;
   logout: () => Promise<void>;
   restoreAuth: () => Promise<void>;
 }

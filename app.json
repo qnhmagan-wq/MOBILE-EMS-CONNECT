@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "EXPO-GO-BOILERPLATE",
-    "slug": "EXPO-GO-BOILERPLATE",
+    "name": "EMS CONNECT",
+    "slug": "ems-connect",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "expogoboilerplate",
+    "scheme": "emsconnect",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -25,17 +25,22 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+    "splash": {
+      "image": "./assets/images/597486658_1215193403858896_2072558280615266887_n.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#8B2A2A"
+    },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/597486658_1215193403858896_2072558280615266887_n.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#8B2A2A",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#8B2A2A"
           }
         }
       ]

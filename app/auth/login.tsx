@@ -12,11 +12,13 @@ import {
   Alert,
   Image,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -149,6 +151,16 @@ export default function LoginScreen() {
                 <Text style={styles.buttonText}>Sign In</Text>
               )}
             </TouchableOpacity>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Don&apos;t have an account? </Text>
+              <TouchableOpacity
+                onPress={() => router.push("/auth/signup")}
+                disabled={isLoading}
+              >
+                <Text style={styles.footerLink}>Sign Up</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -260,6 +272,21 @@ const styles = StyleSheet.create({
   buttonText: {
     color: Colors.textWhite,
     fontSize: FontSizes.md,
+    fontWeight: "600",
+  },
+  footer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: Spacing.lg,
+  },
+  footerText: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+  },
+  footerLink: {
+    fontSize: FontSizes.sm,
+    color: Colors.primary,
     fontWeight: "600",
   },
 });
