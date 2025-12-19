@@ -1,54 +1,14 @@
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { Redirect } from "expo-router";
+import { useAuth } from "@/src/contexts/AuthContext";
 
-export default function HomeScreen() {
-  return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>My Expo Boilerplate 🚀</Text>
+export default function TabsIndex() {
+  const { role } = useAuth();
 
-        <View style={styles.section}>
-          <Text style={styles.subtitle}>Ready to build!</Text>
-          <Text style={styles.text}>
-            This is your clean starting point. Start coding here.
-          </Text>
-        </View>
+  if (role === "responder") {
+    return <Redirect href="/(tabs)/responder/home" />;
+  } else if (role === "community") {
+    return <Redirect href="/(tabs)/community/home" />;
+  }
 
-        <View style={styles.section}>
-          <Text style={styles.subtitle}>Quick Start</Text>
-          <Text style={styles.text}>
-            Edit app/index.tsx to see your changes instantly.
-          </Text>
-        </View>
-      </View>
-    </ScrollView>
-  );
+  return <Redirect href="/auth/login" />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  content: {
-    padding: 20,
-    paddingTop: 60,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    marginBottom: 30,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  subtitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  text: {
-    fontSize: 16,
-    color: "#666",
-    lineHeight: 24,
-  },
-});
