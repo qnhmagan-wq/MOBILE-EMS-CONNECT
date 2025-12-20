@@ -21,7 +21,7 @@ export default function VerifyScreen() {
   const params = useLocalSearchParams();
   const email = (params.email as string) || "";
 
-  const [code, setCode] = useState(["", "", "", ""]);
+  const [code, setCode] = useState(["", "", "", "", "", ""]);
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [error, setError] = useState("");
@@ -35,27 +35,34 @@ export default function VerifyScreen() {
     return `${masked}@${domain}`;
   };
 
+  const CODE_LENGTH = 6;
+
   const handleCodeChange = (value: string, index: number) => {
     // Only allow numbers
     const numericValue = value.replace(/[^0-9]/g, "");
     
     if (numericValue.length > 1) {
       // Handle paste
-      const digits = numericValue.slice(0, 4).split("");
+      const digits = numericValue.slice(0, CODE_LENGTH).split("");
       const newCode = [...code];
       digits.forEach((digit, i) => {
-        if (index + i < 4) {
+        if (index + i < CODE_LENGTH) {
           newCode[index + i] = digit;
         }
       });
       setCode(newCode);
       
       // Focus last filled input or submit
-      const lastFilledIndex = Math.min(index + digits.length - 1, 3);
-      if (lastFilledIndex < 3 && newCode[lastFilledIndex + 1] === "") {
+      const lastFilledIndex = Math.min(index + digits.length - 1, CODE_LENGTH - 1);
+      if (lastFilledIndex < CODE_LENGTH - 1 && newCode[lastFilledIndex + 1] === "") {
         inputRefs.current[lastFilledIndex + 1]?.focus();
       } else {
-        inputRefs.current[3]?.focus();
+        inputRefs.current[CODE_LENGTH - 1]?.focus();
+      }
+      
+      // Auto-submit if all digits are filled
+      if (newCode.every(d => d !== "")) {
+        handleVerify(newCode.join(""));
       }
     } else {
       // Single digit input
@@ -64,14 +71,14 @@ export default function VerifyScreen() {
       setCode(newCode);
 
       // Auto-focus next input
-      if (numericValue && index < 3) {
+      if (numericValue && index < CODE_LENGTH - 1) {
         inputRefs.current[index + 1]?.focus();
       }
 
       // Auto-submit when all fields are filled
-      if (index === 3 && numericValue) {
+      if (index === CODE_LENGTH - 1 && numericValue) {
         const fullCode = newCode.join("");
-        if (fullCode.length === 4) {
+        if (fullCode.length === CODE_LENGTH) {
           handleVerify(fullCode);
         }
       }
@@ -87,8 +94,8 @@ export default function VerifyScreen() {
   const handleVerify = async (verificationCode?: string) => {
     const fullCode = verificationCode || code.join("");
     
-    if (fullCode.length !== 4) {
-      setError("Please enter the complete verification code");
+    if (fullCode.length !== CODE_LENGTH) {
+      setError("Please enter the complete 6-digit verification code");
       return;
     }
 
@@ -123,7 +130,7 @@ export default function VerifyScreen() {
       }
 
       setError(errorMessage);
-      setCode(["", "", "", ""]);
+      setCode(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
     } finally {
       setIsLoading(false);
@@ -142,7 +149,7 @@ export default function VerifyScreen() {
     try {
       await resendVerificationCode({ email });
       Alert.alert("Success", "Verification code has been resent to your email.");
-      setCode(["", "", "", ""]);
+      setCode(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
     } catch (error: any) {
       let errorMessage = "Failed to resend code. Please try again.";
@@ -226,7 +233,7 @@ export default function VerifyScreen() {
             <TouchableOpacity
               style={[styles.button, isLoading && styles.buttonDisabled]}
               onPress={() => handleVerify()}
-              disabled={isLoading || code.join("").length !== 4}
+              disabled={isLoading || code.join("").length !== CODE_LENGTH}
             >
               {isLoading ? (
                 <ActivityIndicator color="#fff" />
@@ -283,23 +290,23 @@ const styles = StyleSheet.create({
   },
   codeContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center",
     marginBottom: Spacing.lg,
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   codeInput: {
     flex: 1,
     borderWidth: 1,
     borderColor: Colors.borderDark,
     borderRadius: BorderRadius.sm,
-    padding: Spacing.md,
-    fontSize: FontSizes.xxl,
+    padding: Spacing.sm,
+    fontSize: FontSizes.xl,
     fontWeight: "bold",
     textAlign: "center",
     backgroundColor: "#8B5A3C",
     color: Colors.textWhite,
-    minHeight: 60,
-    maxWidth: 70,
+    minHeight: 50,
+    maxWidth: 50,
   },
   codeInputError: {
     borderColor: Colors.danger,

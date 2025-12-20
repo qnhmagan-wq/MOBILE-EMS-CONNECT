@@ -2,18 +2,34 @@ import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from "react-native";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
+import { Colors } from "@/src/config/theme";
+import { useRouter } from "expo-router";
 
 export default function CommunityProfileScreen() {
   const { user, logout } = useAuth();
+  const router = useRouter();
+
+  const handleEditProfile = () => {
+    // Navigate to edit profile screen
+    Alert.alert("Edit Profile", "Opening edit profile screen...");
+  };
+
+  const handleUserSettings = () => {
+    Alert.alert("User Settings", "Opening settings...");
+  };
+
+  const handleAboutUs = () => {
+    Alert.alert("About Us", "EMS Connect v1.0");
+  };
 
   const handleLogout = () => {
     Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
+      "Sign Out",
+      "Are you sure you want to sign out?",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Logout",
+          text: "Sign Out",
           style: "destructive",
           onPress: async () => {
             await logout();
@@ -24,44 +40,82 @@ export default function CommunityProfileScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.avatar}>
-            <Ionicons name="person" size={48} color="#34C759" />
-          </View>
-          <Text style={styles.name}>{user?.name}</Text>
-          <Text style={styles.email}>{user?.email}</Text>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>Community Member</Text>
-          </View>
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>PROFILE</Text>
+        <View style={styles.headerRight}>
+          <Ionicons name="notifications-outline" size={28} color="#FFFFFF" />
         </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account Information</Text>
-
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>User ID</Text>
-              <Text style={styles.infoValue}>{user?.id}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Role</Text>
-              <Text style={styles.infoValue}>{user?.role}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValue}>{user?.email}</Text>
-            </View>
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={20} color="#fff" />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
       </View>
-    </ScrollView>
+
+      <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
+        {/* Profile Card */}
+        <View style={styles.profileCard}>
+          <View style={styles.avatar}>
+            <Ionicons name="person" size={60} color={Colors.primary} />
+          </View>
+          <Text style={styles.name}>{user?.name || "Navin Magan"}</Text>
+          <Text style={styles.email}>{user?.email || "navinmagan@gmail.com"}</Text>
+          <Text style={styles.phone}>09199053556</Text>
+
+          {/* Medical Info */}
+          <View style={styles.medicalInfo}>
+            <View style={styles.infoItem}>
+              <Ionicons name="water" size={18} color={Colors.textSecondary} />
+              <Text style={styles.infoText}>Blood Type: O+</Text>
+            </View>
+            <View style={styles.infoItem}>
+              <Ionicons name="warning" size={18} color={Colors.textSecondary} />
+              <Text style={styles.infoText}>Allergies: Penicillin, Peanuts</Text>
+            </View>
+            <View style={styles.infoItem}>
+              <Ionicons name="fitness" size={18} color={Colors.textSecondary} />
+              <Text style={styles.infoText}>Existing Conditions: Asthma, Hypertension</Text>
+            </View>
+            <View style={styles.infoItem}>
+              <Ionicons name="medkit" size={18} color={Colors.textSecondary} />
+              <Text style={styles.infoText}>Medications: Salbutamol Inhaler, Loraplne 5mg</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Menu Items */}
+        <View style={styles.menuContainer}>
+          <TouchableOpacity style={styles.menuItem} onPress={handleEditProfile}>
+            <View style={styles.menuIconContainer}>
+              <Ionicons name="create-outline" size={24} color={Colors.textPrimary} />
+            </View>
+            <Text style={styles.menuText}>Edit Profile</Text>
+            <Ionicons name="chevron-forward" size={24} color={Colors.textSecondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem} onPress={handleUserSettings}>
+            <View style={styles.menuIconContainer}>
+              <Ionicons name="settings-outline" size={24} color={Colors.textPrimary} />
+            </View>
+            <Text style={styles.menuText}>User Settings</Text>
+            <Ionicons name="chevron-forward" size={24} color={Colors.textSecondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem} onPress={handleAboutUs}>
+            <View style={styles.menuIconContainer}>
+              <Ionicons name="information-circle-outline" size={24} color={Colors.textPrimary} />
+            </View>
+            <Text style={styles.menuText}>About Us</Text>
+            <Ionicons name="chevron-forward" size={24} color={Colors.textSecondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
+            <View style={styles.menuIconContainer}>
+              <Ionicons name="log-out-outline" size={24} color={Colors.textPrimary} />
+            </View>
+            <Text style={styles.menuText}>Sign Out</Text>
+            <Ionicons name="chevron-forward" size={24} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -70,102 +124,119 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f5f5f5",
   },
-  content: {
-    padding: 20,
-    paddingTop: 60,
-  },
   header: {
+    backgroundColor: Colors.primary,
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 30,
-    marginBottom: 20,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    letterSpacing: 1,
+  },
+  headerRight: {
+    flexDirection: "row",
+  },
+  content: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 100,
+  },
+  profileCard: {
+    backgroundColor: "#FFFFFF",
+    marginTop: -20,
+    marginHorizontal: 20,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "#E8F9EE",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#F5F5F5",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 16,
+    borderWidth: 3,
+    borderColor: Colors.border,
   },
   name: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#333",
+    color: Colors.textPrimary,
     marginBottom: 4,
   },
   email: {
     fontSize: 14,
-    color: "#666",
-    marginBottom: 12,
+    color: Colors.textSecondary,
+    marginBottom: 2,
   },
-  roleBadge: {
-    backgroundColor: "#34C759",
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  roleText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 12,
-    textTransform: "uppercase",
-  },
-  section: {
+  phone: {
+    fontSize: 14,
+    color: Colors.textSecondary,
     marginBottom: 20,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 12,
+  medicalInfo: {
+    width: "100%",
+    marginTop: 12,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
   },
-  infoCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  infoRow: {
+  infoItem: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    alignItems: "flex-start",
+    marginBottom: 12,
+    gap: 8,
   },
-  infoLabel: {
-    fontSize: 14,
-    color: "#666",
+  infoText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    flex: 1,
+    lineHeight: 20,
   },
-  infoValue: {
-    fontSize: 14,
-    color: "#333",
-    fontWeight: "500",
+  menuContainer: {
+    marginTop: 20,
+    marginHorizontal: 20,
   },
-  logoutButton: {
-    backgroundColor: "#FF3B30",
-    borderRadius: 12,
-    padding: 16,
+  menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginTop: 20,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  logoutText: {
-    color: "#fff",
+  menuIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#F5F5F5",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  menuText: {
+    flex: 1,
     fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 8,
+    fontWeight: "500",
+    color: Colors.textPrimary,
   },
 });

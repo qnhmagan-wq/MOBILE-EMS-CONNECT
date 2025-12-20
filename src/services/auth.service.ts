@@ -13,7 +13,7 @@ import { saveToken, saveUser, saveRole, getUser, clearAll } from './storage.serv
 
 export const login = async (credentials: LoginCredentials): Promise<LoginResponse> => {
   try {
-    const response = await api.post<LoginResponse>('/api/auth/login', credentials);
+    const response = await api.post<LoginResponse>('/auth/login', credentials);
     const { token, user, role } = response.data;
 
     await saveToken(token);
@@ -28,7 +28,7 @@ export const login = async (credentials: LoginCredentials): Promise<LoginRespons
 
 export const signup = async (credentials: SignupCredentials): Promise<SignupResponse> => {
   try {
-    const response = await api.post<SignupResponse>('/api/auth/signup', credentials);
+    const response = await api.post<SignupResponse>('/auth/signup', credentials);
     return response.data;
   } catch (error: any) {
     throw error;
@@ -37,7 +37,7 @@ export const signup = async (credentials: SignupCredentials): Promise<SignupResp
 
 export const verifyEmail = async (credentials: VerificationCredentials): Promise<VerificationResponse> => {
   try {
-    const response = await api.post<VerificationResponse>('/api/auth/verify-email', credentials);
+    const response = await api.post<VerificationResponse>('/auth/verify-email', credentials);
     const { token, user, role } = response.data;
 
     await saveToken(token);
@@ -52,7 +52,7 @@ export const verifyEmail = async (credentials: VerificationCredentials): Promise
 
 export const resendVerificationCode = async (credentials: ResendVerificationCredentials): Promise<{ message: string }> => {
   try {
-    const response = await api.post<{ message: string }>('/api/auth/resend-verification', credentials);
+    const response = await api.post<{ message: string }>('/auth/resend-verification', credentials);
     return response.data;
   } catch (error: any) {
     throw error;

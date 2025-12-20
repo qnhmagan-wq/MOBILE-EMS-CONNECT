@@ -7,12 +7,15 @@ export default function CommunityLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.communityPrimary,
+        tabBarActiveTintColor: Colors.primary, // Dark red/maroon
         tabBarInactiveTintColor: Colors.textSecondary,
         tabBarStyle: {
           backgroundColor: Colors.surface,
           borderTopWidth: 1,
           borderTopColor: Colors.border,
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 8,
         },
       }}
     >
@@ -28,28 +31,43 @@ export default function CommunityLayout() {
       <Tabs.Screen
         name="report"
         options={{
-          title: "Report",
+          title: "",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="add-circle" size={size} color={color} />
+            <Ionicons name="location" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="history"
         options={{
-          title: "History",
+          title: "",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="time" size={size} color={color} />
+            <Ionicons name="add-circle" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="first-aid"
+        options={{
+          title: "",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="medkit" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
+          title: "",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person" size={size} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="emergency-call"
+        options={{
+          href: null, // Hide from tab bar
         }}
       />
     </Tabs>

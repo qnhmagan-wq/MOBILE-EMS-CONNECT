@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
+import ENV from "@/src/config/env";
 
 export default function SignupScreen() {
   const { signup } = useAuth();
@@ -26,6 +27,7 @@ export default function SignupScreen() {
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>("");
   const [errors, setErrors] = useState({
     first_name: "",
     last_name: "",
@@ -36,6 +38,17 @@ export default function SignupScreen() {
     password_confirmation: "",
     general: "",
   });
+
+  // Set debug info on mount
+  useEffect(() => {
+    try {
+      const apiUrl = ENV?.API_BASE_URL || 'ENV NOT LOADED';
+      setDebugInfo(apiUrl);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      setDebugInfo(`Error: ${errorMsg}`);
+    }
+  }, []);
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -416,6 +429,11 @@ export default function SignupScreen() {
                 <Text style={styles.footerLink}>Sign In</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Debug info - visible on screen */}
+            <View style={styles.debugContainer}>
+              <Text style={styles.debugText}>API: {debugInfo || 'Loading...'}</Text>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -537,5 +555,19 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.sm,
     color: Colors.primary,
     fontWeight: "600",
+  },
+  debugContainer: {
+    marginTop: Spacing.lg,
+    padding: Spacing.sm,
+    backgroundColor: '#f0f0f0',
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  debugText: {
+    fontSize: FontSizes.xs,
+    color: '#666',
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });

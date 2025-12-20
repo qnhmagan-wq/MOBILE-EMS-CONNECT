@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -15,14 +15,38 @@ import {
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
+import ENV from "@/src/config/env";
 
 export default function LoginScreen() {
   const { login } = useAuth();
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({ email: "", password: "", general: "" });
+  const [debugInfo, setDebugInfo] = useState<string>("");
+
+  // Show API URL on screen load for debugging
+  useEffect(() => {
+    try {
+      const apiUrl = ENV?.API_BASE_URL || 'ENV NOT LOADED';
+      setDebugInfo(apiUrl);
+      
+      // Delay alert slightly to ensure screen is mounted
+      setTimeout(() => {
+        Alert.alert(
+          "🔍 Debug Info",
+          `API URL: ${apiUrl}\n\nThis is for testing. The app will connect to this URL.`,
+          [{ text: "OK" }]
+        );
+      }, 500);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      setDebugInfo(`Error: ${errorMsg}`);
+      Alert.alert("Error", `Failed to load ENV: ${errorMsg}`);
+    }
+  }, []);
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -161,6 +185,11 @@ export default function LoginScreen() {
                 <Text style={styles.footerLink}>Sign Up</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Debug info - visible on screen */}
+            <View style={styles.debugContainer}>
+              <Text style={styles.debugText}>API: {debugInfo || 'Loading...'}</Text>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -288,5 +317,19 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.sm,
     color: Colors.primary,
     fontWeight: "600",
+  },
+  debugContainer: {
+    marginTop: Spacing.lg,
+    padding: Spacing.sm,
+    backgroundColor: '#f0f0f0',
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  debugText: {
+    fontSize: FontSizes.xs,
+    color: '#666',
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });
