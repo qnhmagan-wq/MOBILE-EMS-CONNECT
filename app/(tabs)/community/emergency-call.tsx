@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,20 +6,64 @@ import {
   StyleSheet,
   Alert,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAgoraCall } from '@/src/hooks/useAgoraCall';
+import { useIncidents } from '@/src/hooks/useIncidents';
 import { Colors } from '@/src/config/theme';
+import { IncidentType } from '@/src/types/incident.types';
 
 export default function EmergencyCallScreen() {
   const router = useRouter();
   const { callState, startCall, endCall, toggleMute } = useAgoraCall();
+  const { createIncident, isLoading: isCreatingIncident, error: incidentError } = useIncidents();
+  const [currentIncidentId, setCurrentIncidentId] = useState<number | null>(null);
+  const [isStartingEmergency, setIsStartingEmergency] = useState(false);
 
-  const handleStartCall = async () => {
-    const result = await startCall();
-    if (!result.success) {
-      Alert.alert('Error', result.error || 'Failed to start call');
+  const handleStartCall = async (emergencyType: IncidentType = 'medical') => {
+    setIsStartingEmergency(true);
+    
+    try {
+      // Step 1: Create incident with location
+      console.log('[Emergency] Step 1: Creating incident...');
+      const incident = await createIncident(emergencyType, 'Emergency call initiated');
+      
+      if (!incident) {
+        // Get the actual error from the hook
+        const errorMessage = incidentError || 'Failed to report emergency. Please check your location permissions and try again.';
+        console.error('[Emergency] Incident creation failed:', errorMessage);
+        Alert.alert(
+          'Emergency Report Failed', 
+          errorMessage,
+          [{ text: 'OK' }]
+        );
+        setIsStartingEmergency(false);
+        return;
+      }
+      
+      console.log('[Emergency] Step 2: Incident created successfully:', incident.id);
+      setCurrentIncidentId(incident.id);
+      
+      // Step 3: Start the call with incident_id
+      console.log('[Emergency] Step 3: Starting call with incident_id:', incident.id);
+      const result = await startCall(incident.id);
+      
+      if (!result.success) {
+        console.error('[Emergency] Call start failed:', result.error);
+        Alert.alert('Error', result.error || 'Failed to start call');
+      } else {
+        console.log('[Emergency] Call started successfully');
+      }
+    } catch (error: any) {
+      console.error('[Emergency] Unexpected error:', error);
+      Alert.alert(
+        'Error', 
+        error.message || 'Failed to start emergency call. Please try again.'
+      );
+    } finally {
+      setIsStartingEmergency(false);
     }
   };
 
@@ -53,6 +97,15 @@ export default function EmergencyCallScreen() {
 
       {/* Call Status */}
       <View style={styles.statusContainer}>
+        {isStartingEmergency && !callState.isConnecting && (
+          <>
+            <View style={styles.pulseContainer}>
+              <ActivityIndicator size="large" color="#FFFFFF" />
+            </View>
+            <Text style={styles.statusText}>Getting Location...</Text>
+            <Text style={styles.subText}>Reporting your emergency and location</Text>
+          </>
+        )}
         {callState.isConnecting && (
           <>
             <View style={styles.pulseContainer}>
@@ -87,7 +140,7 @@ export default function EmergencyCallScreen() {
             <Text style={styles.subText}>Emergency Dispatcher</Text>
           </>
         )}
-        {!callState.isInCall && !callState.isConnecting && !callState.isWaitingForAnswer && (
+        {!callState.isInCall && !callState.isConnecting && !callState.isWaitingForAnswer && !isStartingEmergency && (
           <>
             <View style={styles.readyContainer}>
               <Ionicons name="call-outline" size={64} color="#FFFFFF" />
@@ -100,14 +153,21 @@ export default function EmergencyCallScreen() {
 
       {/* Call Controls */}
       <View style={styles.controls}>
-        {!callState.isInCall && !callState.isConnecting && !callState.isWaitingForAnswer && (
+        {!callState.isInCall && !callState.isConnecting && !callState.isWaitingForAnswer && !isStartingEmergency && (
           <TouchableOpacity
             style={[styles.button, styles.callButton]}
-            onPress={handleStartCall}
+            onPress={() => handleStartCall('medical')}
           >
             <Ionicons name="call" size={32} color="#FFFFFF" style={styles.buttonIcon} />
             <Text style={styles.buttonText}>Emergency Call</Text>
           </TouchableOpacity>
+        )}
+
+        {isStartingEmergency && !callState.isConnecting && (
+          <View style={[styles.button, styles.disabledButton]}>
+            <ActivityIndicator color="#FFFFFF" style={styles.buttonIcon} />
+            <Text style={styles.buttonText}>Starting Emergency...</Text>
+          </View>
         )}
 
         {callState.isWaitingForAnswer && (
@@ -269,6 +329,9 @@ const styles = StyleSheet.create({
   },
   callButton: {
     backgroundColor: '#10B981',
+  },
+  disabledButton: {
+    backgroundColor: '#6B7280',
   },
   cancelButton: {
     backgroundColor: '#F59E0B',

@@ -12,7 +12,8 @@
       "bundleIdentifier": "com.emsconnect.app",
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Allow EMS Connect to access your microphone for emergency calls."
+        "NSMicrophoneUsageDescription": "Allow EMS Connect to access your microphone for emergency calls.",
+        "NSLocationWhenInUseUsageDescription": "Allow EMS Connect to access your location to report emergencies accurately."
       }
     },
     "android": {
@@ -27,7 +28,9 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
@@ -41,6 +44,12 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow EMS Connect to access your location for emergency reporting."
+        }
+      ],
       [
         "expo-splash-screen",
         {
