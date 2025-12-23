@@ -25,6 +25,8 @@ export interface Incident {
   description: string;
   created_at: string;
   updated_at?: string;
+  dispatched_at?: string | null;
+  completed_at?: string | null;
 }
 
 export interface CreateIncidentRequest {

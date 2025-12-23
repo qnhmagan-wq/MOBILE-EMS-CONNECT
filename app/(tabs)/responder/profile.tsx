@@ -1,19 +1,40 @@
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, SafeAreaView, Image } from "react-native";
+import { useRouter } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
+import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
+import * as incidentService from "@/src/services/incident.service";
+import { Incident } from "@/src/types/incident.types";
 
 export default function ResponderProfileScreen() {
+  const router = useRouter();
   const { user, logout } = useAuth();
+  const [completedResponses, setCompletedResponses] = useState<Incident[]>([]);
+
+  useEffect(() => {
+    loadCompletedResponses();
+  }, []);
+
+  const loadCompletedResponses = async () => {
+    try {
+      const incidents = await incidentService.getIncidents();
+      // Filter only completed incidents
+      const completed = incidents.filter(inc => inc.status === 'completed');
+      setCompletedResponses(completed.slice(0, 10)); // Show last 10
+    } catch (error) {
+      console.error('Failed to load responses:', error);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
+      "Sign Out",
+      "Are you sure you want to sign out?",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Logout",
+          text: "Sign Out",
           style: "destructive",
           onPress: async () => {
             await logout();
@@ -23,149 +44,226 @@ export default function ResponderProfileScreen() {
     );
   };
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+    });
+  };
+
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.avatar}>
-            <Ionicons name="person" size={48} color="#007AFF" />
-          </View>
-          <Text style={styles.name}>{user?.name}</Text>
-          <Text style={styles.email}>{user?.email}</Text>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>Responder</Text>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account Information</Text>
-
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>User ID</Text>
-              <Text style={styles.infoValue}>{user?.id}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Role</Text>
-              <Text style={styles.infoValue}>{user?.role}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValue}>{user?.email}</Text>
-            </View>
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={20} color="#fff" />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Profile</Text>
       </View>
-    </ScrollView>
+
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        {/* User Info Section - Dark Red */}
+        <View style={styles.userInfoSection}>
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatar}>
+              <Ionicons name="person" size={48} color={Colors.primary} />
+            </View>
+          </View>
+          
+          <View style={styles.userInfoBanner}>
+            <Text style={styles.roleText}>ADMIN</Text>
+            <Text style={styles.name}>{user?.name || 'Responder'}</Text>
+          </View>
+        </View>
+
+        {/* Menu Section - White */}
+        <View style={styles.menuSection}>
+          <TouchableOpacity style={styles.menuItem}>
+            <View style={styles.menuIconContainer}>
+              <Ionicons name="person-add" size={20} color={Colors.textPrimary} />
+            </View>
+            <Text style={styles.menuText}>Edit Profile</Text>
+            <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem}>
+            <View style={styles.menuIconContainer}>
+              <Ionicons name="settings" size={20} color={Colors.textPrimary} />
+            </View>
+            <Text style={styles.menuText}>User Settings</Text>
+            <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
+            <View style={styles.menuIconContainer}>
+              <Ionicons name="log-out" size={20} color={Colors.textPrimary} />
+            </View>
+            <Text style={styles.menuText}>Sign Out</Text>
+            <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Responses Section - Dark Red */}
+        <View style={styles.responsesSection}>
+          <Text style={styles.responsesTitle}>My Complete Responses:</Text>
+          
+          {completedResponses.length === 0 ? (
+            <View style={styles.emptyResponses}>
+              <Text style={styles.emptyText}>No completed responses yet</Text>
+            </View>
+          ) : (
+            <View style={styles.responsesGrid}>
+              {completedResponses.map((response) => (
+                <View key={response.id} style={styles.responseCard}>
+                  <View style={styles.responseImagePlaceholder}>
+                    <Ionicons name="image" size={32} color="rgba(255,255,255,0.5)" />
+                  </View>
+                  <Text style={styles.responseAddress}>Address:</Text>
+                  <Text style={styles.responseDate}>date: {formatDate(response.created_at)}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  content: {
-    padding: 20,
-    paddingTop: 60,
+    backgroundColor: Colors.surface,
   },
   header: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  headerTitle: {
+    fontSize: FontSizes.xl,
+    fontWeight: "bold",
+    color: Colors.textWhite,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    flexGrow: 1,
+  },
+  userInfoSection: {
+    backgroundColor: Colors.primary,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.lg,
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 30,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+  },
+  avatarContainer: {
+    marginBottom: Spacing.lg,
   },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: "#E8F4FF",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
+    borderWidth: 4,
+    borderColor: Colors.textWhite,
   },
-  name: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
-  },
-  email: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 12,
-  },
-  roleBadge: {
-    backgroundColor: "#007AFF",
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
+  userInfoBanner: {
+    backgroundColor: Colors.textWhite,
+    width: "100%",
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    alignItems: "center",
+    borderTopLeftRadius: BorderRadius.lg,
+    borderTopRightRadius: BorderRadius.lg,
   },
   roleText: {
-    color: "#fff",
+    fontSize: FontSizes.sm,
     fontWeight: "600",
-    fontSize: 12,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.xs,
     textTransform: "uppercase",
   },
-  section: {
-    marginBottom: 20,
+  name: {
+    fontSize: FontSizes.lg,
+    fontWeight: "bold",
+    color: Colors.textPrimary,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 12,
+  menuSection: {
+    backgroundColor: Colors.textWhite,
+    paddingVertical: Spacing.sm,
   },
-  infoCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: "#666",
-  },
-  infoValue: {
-    fontSize: 14,
-    color: "#333",
-    fontWeight: "500",
-  },
-  logoutButton: {
-    backgroundColor: "#FF3B30",
-    borderRadius: 12,
-    padding: 16,
+  menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginTop: 20,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  logoutText: {
-    color: "#fff",
-    fontSize: 16,
+  menuIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.surface,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: Spacing.md,
+  },
+  menuText: {
+    flex: 1,
+    fontSize: FontSizes.md,
+    color: Colors.textPrimary,
+  },
+  responsesSection: {
+    backgroundColor: Colors.primary,
+    padding: Spacing.lg,
+    paddingTop: Spacing.xl,
+    minHeight: 300,
+  },
+  responsesTitle: {
+    fontSize: FontSizes.md,
     fontWeight: "600",
-    marginLeft: 8,
+    color: Colors.textWhite,
+    marginBottom: Spacing.lg,
+  },
+  emptyResponses: {
+    alignItems: "center",
+    paddingVertical: Spacing.xl,
+  },
+  emptyText: {
+    fontSize: FontSizes.sm,
+    color: "rgba(255,255,255,0.7)",
+  },
+  responsesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.md,
+  },
+  responseCard: {
+    width: "48%",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: BorderRadius.md,
+    overflow: "hidden",
+  },
+  responseImagePlaceholder: {
+    width: "100%",
+    height: 120,
+    backgroundColor: "rgba(0,0,0,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  responseAddress: {
+    fontSize: FontSizes.xs,
+    color: Colors.textWhite,
+    paddingHorizontal: Spacing.sm,
+    paddingTop: Spacing.xs,
+  },
+  responseDate: {
+    fontSize: FontSizes.xs,
+    color: Colors.textWhite,
+    paddingHorizontal: Spacing.sm,
+    paddingBottom: Spacing.sm,
   },
 });

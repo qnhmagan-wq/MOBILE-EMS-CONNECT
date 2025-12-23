@@ -84,17 +84,44 @@ export default function LoginScreen() {
 
     try {
       await login({ email: email.trim(), password });
+      // Navigation is handled automatically by AuthContext and _layout.tsx
     } catch (error: any) {
       let errorMessage = "Login failed. Please try again.";
+      let alertTitle = "Login Failed";
 
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
+      // Handle specific error cases
+      if (error.response?.status === 422) {
+        const responseData = error.response.data;
+        const message = responseData.message || "";
+        
+        // Check for inactive responder account
+        if (message.includes("inactive") || message.includes("deactivated")) {
+          errorMessage = "Your responder account has been deactivated. Please contact an administrator to reactivate your account.";
+          alertTitle = "Account Inactive";
+        } 
+        // Check for incorrect credentials or access denied
+        else if (message.includes("incorrect") || message.includes("do not have access")) {
+          errorMessage = "Invalid email or password. Please try again.";
+          alertTitle = "Login Failed";
+        } 
+        // Use the message from backend
+        else {
+          errorMessage = message;
+        }
+      } else if (error.response?.status === 401) {
+        errorMessage = "Invalid email or password. Please try again.";
+      } else if (error.response?.status >= 500) {
+        errorMessage = "Server error. Please try again later.";
+        alertTitle = "Server Error";
+      } else if (error.code === "NETWORK_ERROR" || error.message?.includes("Network")) {
+        errorMessage = "Failed to connect to server. Please check your internet connection.";
+        alertTitle = "Connection Error";
       } else if (error.message) {
         errorMessage = error.message;
       }
 
       setErrors({ ...newErrors, general: errorMessage });
-      Alert.alert("Login Failed", errorMessage);
+      Alert.alert(alertTitle, errorMessage, [{ text: "OK" }]);
     } finally {
       setIsLoading(false);
     }

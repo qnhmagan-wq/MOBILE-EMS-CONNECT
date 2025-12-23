@@ -25,11 +25,11 @@ export const createIncident = async (
 
 /**
  * Get all incidents for the current user
- * GET /api/incidents
+ * GET /api/incidents/my
  */
 export const getIncidents = async (): Promise<Incident[]> => {
   try {
-    const response = await api.get<GetIncidentsResponse>('/incidents');
+    const response = await api.get<GetIncidentsResponse>('/incidents/my');
     return response.data.incidents;
   } catch (error: any) {
     console.error('[Incident Service] Get incidents error:', error.response?.data || error.message);

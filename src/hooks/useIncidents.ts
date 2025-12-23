@@ -14,6 +14,7 @@ interface UseIncidentsReturn {
   error: string | null;
   createIncident: (type: IncidentType, description: string) => Promise<Incident | null>;
   loadIncidents: () => Promise<void>;
+  startPolling: (intervalMs?: number) => () => void;
   clearError: () => void;
 }
 
@@ -185,6 +186,18 @@ export const useIncidents = (): UseIncidentsReturn => {
     }
   }, []);
 
+  /**
+   * Start polling for incident updates
+   * Returns cleanup function to stop polling
+   */
+  const startPolling = useCallback((intervalMs: number = 15000) => {
+    const interval = setInterval(() => {
+      loadIncidents();
+    }, intervalMs);
+
+    return () => clearInterval(interval);
+  }, [loadIncidents]);
+
   return {
     incidents,
     currentIncident,
@@ -192,6 +205,7 @@ export const useIncidents = (): UseIncidentsReturn => {
     error,
     createIncident,
     loadIncidents,
+    startPolling,
     clearError,
   };
 };

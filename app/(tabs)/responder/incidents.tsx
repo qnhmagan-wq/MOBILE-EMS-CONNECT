@@ -1,69 +1,383 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator } from "react-native";
+import { useRouter } from "expo-router";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { useDispatch } from "@/src/contexts/DispatchContext";
+import { Ionicons } from "@expo/vector-icons";
+import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
+import { Dispatch, DispatchStatus } from "@/src/types/dispatch.types";
 
-export default function IncidentsScreen() {
+export default function ResponderIncidentsScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const { activeDispatches, isOnDuty } = useDispatch();
+  const [status, setStatus] = React.useState<'Available' | 'Busy'>('Available');
+
+  const getPriority = (type: string): 'HIGH' | 'MID' | 'LOW' => {
+    if (type === 'medical' || type === 'fire') {
+      return 'HIGH';
+    } else if (type === 'accident' || type === 'crime') {
+      return 'MID';
+    }
+    return 'LOW';
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'HIGH':
+        return '#EF4444'; // Red
+      case 'MID':
+        return '#F59E0B'; // Orange
+      default:
+        return '#10B981'; // Green
+    }
+  };
+
+  const getStatusColor = (status: DispatchStatus) => {
+    switch (status) {
+      case 'assigned':
+        return '#EF4444'; // Red
+      case 'accepted':
+        return '#3B82F6'; // Blue
+      case 'en_route':
+        return '#F59E0B'; // Orange
+      case 'arrived':
+        return '#8B5CF6'; // Purple
+      case 'completed':
+        return '#10B981'; // Green
+      default:
+        return '#6B7280'; // Gray
+    }
+  };
+
+  const getStatusLabel = (status: DispatchStatus) => {
+    switch (status) {
+      case 'assigned':
+        return 'NEW';
+      case 'accepted':
+        return 'ACCEPTED';
+      case 'en_route':
+        return 'EN ROUTE';
+      case 'arrived':
+        return 'ON SCENE';
+      case 'completed':
+        return 'COMPLETED';
+      case 'declined':
+        return 'DECLINED';
+      default:
+        return status.toUpperCase();
+    }
+  };
+
+  const getIncidentIcon = (type: string) => {
+    switch (type) {
+      case 'medical':
+        return 'medical';
+      case 'fire':
+        return 'flame';
+      case 'accident':
+        return 'car';
+      case 'crime':
+        return 'shield';
+      case 'natural_disaster':
+        return 'warning';
+      default:
+        return 'alert-circle';
+    }
+  };
+
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Incidents</Text>
-          <Text style={styles.subtitle}>Active and recent incidents</Text>
+    <SafeAreaView style={styles.container}>
+      {/* Header Banner - Dark Red */}
+      <View style={styles.headerBanner}>
+        <View style={styles.headerLeft}>
+          <View style={styles.logoContainer}>
+            <Ionicons name="medical" size={32} color={Colors.textWhite} />
+          </View>
+          <View style={styles.welcomeContainer}>
+            <Text style={styles.welcomeText}>WELCOME, {user?.name?.toUpperCase() || 'RESPONDER'}</Text>
+            <TouchableOpacity
+              style={[styles.statusButton, status === 'Available' && styles.statusButtonActive]}
+              onPress={() => setStatus(status === 'Available' ? 'Busy' : 'Available')}
+            >
+              <Text style={styles.statusButtonText}>{status}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+        <TouchableOpacity style={styles.notificationButton}>
+          <Ionicons name="notifications" size={24} color={Colors.textWhite} />
+          <View style={styles.notificationDot} />
+        </TouchableOpacity>
+      </View>
 
+      {/* Title */}
+      <View style={styles.titleContainer}>
+        <Text style={styles.title}>Incident Notifications Module:</Text>
+      </View>
+
+      {/* Dispatches List */}
+      {!isOnDuty ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>📋</Text>
-          <Text style={styles.emptyTitle}>No incidents</Text>
+          <Ionicons name="moon-outline" size={64} color={Colors.textSecondary} />
+          <Text style={styles.emptyTitle}>You are Off Duty</Text>
           <Text style={styles.emptyText}>
-            Active incidents will appear here
+            Toggle duty status to ON in the Home screen to start receiving dispatch assignments
           </Text>
         </View>
-      </View>
-    </ScrollView>
+      ) : activeDispatches.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="checkmark-circle-outline" size={64} color={Colors.textSecondary} />
+          <Text style={styles.emptyTitle}>No Active Dispatches</Text>
+          <Text style={styles.emptyText}>
+            You will receive a notification when you are assigned to an emergency
+          </Text>
+        </View>
+      ) : (
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.incidentsList}>
+          {activeDispatches.map((dispatch) => {
+            const priority = getPriority(dispatch.incident.type);
+            return (
+              <TouchableOpacity
+                key={dispatch.id}
+                style={styles.incidentCard}
+                onPress={() => router.push(`/(tabs)/responder/incident-details?id=${dispatch.incident_id}&dispatchId=${dispatch.id}`)}
+              >
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardHeaderLeft}>
+                    <Ionicons
+                      name={getIncidentIcon(dispatch.incident.type) as any}
+                      size={24}
+                      color={Colors.textWhite}
+                    />
+                    <Text style={styles.incidentTitle}>
+                      {dispatch.incident.type.charAt(0).toUpperCase() + dispatch.incident.type.slice(1).replace('_', ' ')}
+                    </Text>
+                  </View>
+                  <View style={styles.badgeContainer}>
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(dispatch.status) }]}>
+                      <Text style={styles.statusText}>{getStatusLabel(dispatch.status)}</Text>
+                    </View>
+                    <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(priority) }]}>
+                      <Text style={styles.priorityText}>{priority}</Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={styles.locationRow}>
+                  <Ionicons name="location" size={16} color={Colors.textWhite} />
+                  <Text style={styles.locationText} numberOfLines={1}>
+                    {dispatch.incident.address}
+                  </Text>
+                </View>
+                {dispatch.distance_text && (
+                  <View style={styles.distanceRow}>
+                    <Ionicons name="navigate" size={16} color={Colors.textWhite} />
+                    <Text style={styles.distanceText}>
+                      {dispatch.distance_text} • {dispatch.duration_text || 'Calculating...'}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
+      {/* Bottom Red Section */}
+      <View style={styles.bottomSection} />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: Colors.surface,
   },
-  content: {
-    padding: 20,
-    paddingTop: 60,
+  headerBanner: {
+    backgroundColor: Colors.primary,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
-  header: {
-    marginBottom: 30,
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  logoContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.textWhite,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: Spacing.md,
+  },
+  welcomeContainer: {
+    flex: 1,
+  },
+  welcomeText: {
+    fontSize: FontSizes.sm,
+    fontWeight: "600",
+    color: Colors.textWhite,
+    marginBottom: Spacing.xs,
+  },
+  statusButton: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: 20,
+    alignSelf: "flex-start",
+  },
+  statusButtonActive: {
+    backgroundColor: "#10B981",
+  },
+  statusButtonText: {
+    fontSize: FontSizes.xs,
+    fontWeight: "600",
+    color: Colors.textWhite,
+  },
+  notificationButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+  },
+  notificationDot: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#F59E0B",
+  },
+  titleContainer: {
+    backgroundColor: Colors.surface,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
+    fontSize: FontSizes.md,
+    fontWeight: "600",
+    color: Colors.textPrimary,
   },
-  subtitle: {
-    fontSize: 16,
-    color: "#666",
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: Spacing.xl,
+  },
+  loadingText: {
+    marginTop: Spacing.md,
+    color: Colors.textSecondary,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  incidentsList: {
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xl,
+  },
+  incidentCard: {
+    backgroundColor: "#8B5A3C",
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.sm,
+  },
+  cardHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    flex: 1,
+  },
+  incidentTitle: {
+    fontSize: FontSizes.lg,
+    fontWeight: "bold",
+    color: Colors.textWhite,
+    flex: 1,
+  },
+  badgeContainer: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+  },
+  statusBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: FontSizes.xs,
+    fontWeight: "bold",
+    color: Colors.textWhite,
+  },
+  priorityBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: 12,
+  },
+  priorityText: {
+    fontSize: FontSizes.xs,
+    fontWeight: "bold",
+    color: Colors.textWhite,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  locationText: {
+    fontSize: FontSizes.sm,
+    color: Colors.textWhite,
+    flex: 1,
+  },
+  distanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  distanceText: {
+    fontSize: FontSizes.sm,
+    color: Colors.textWhite,
+    fontWeight: "600",
   },
   emptyState: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 40,
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
-    marginTop: 40,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
+    padding: Spacing.xl,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: FontSizes.lg,
     fontWeight: "600",
-    color: "#333",
-    marginBottom: 8,
+    color: Colors.textPrimary,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   emptyText: {
-    fontSize: 14,
-    color: "#999",
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
     textAlign: "center",
+  },
+  bottomSection: {
+    height: 100,
+    backgroundColor: Colors.primary,
   },
 });
