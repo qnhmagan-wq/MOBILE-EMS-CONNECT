@@ -1,43 +1,29 @@
 /**
  * Maps Configuration
  *
- * Configuration for Google Maps and OpenRouteService integration
+ * Configuration for OpenRouteService integration (SYNCED WITH BACKEND)
+ * ⚠️ IMPORTANT: Uses same ORS API key as Laravel backend
  */
-
-/**
- * Google Maps API Key
- *
- * IMPORTANT: Replace with your actual Google Maps API key from:
- * https://console.cloud.google.com/google/maps-apis
- *
- * Required APIs to enable:
- * - Maps SDK for Android
- * - Maps SDK for iOS
- * - Directions API
- * - Distance Matrix API
- */
-export const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || 'YOUR_GOOGLE_MAPS_API_KEY_HERE';
 
 /**
  * OpenRouteService API Key
  *
- * Free alternative to Google Directions API
- * Get your free API key from: https://openrouteservice.org/dev/#/signup
+ * SYNCED WITH BACKEND - Same key used by Laravel
+ * This ensures shared 2,000 requests/day quota and consistent routing
  *
  * Features:
- * - 2,000 requests/day (free tier)
- * - Driving directions
- * - Turn-by-turn navigation
+ * - 2,000 requests/day (shared with backend)
+ * - 40 requests/minute
+ * - Driving directions with turn-by-turn
  * - Geocoding & reverse geocoding
- * - Distance matrix
+ * - FREE (no credit card required)
  */
-export const ORS_API_KEY = process.env.EXPO_PUBLIC_ORS_API_KEY || '5b3ce3597851100001cf62848';
+export const ORS_API_KEY = process.env.EXPO_PUBLIC_ORS_API_KEY || 'eyJvcmciOiI1YjNjZTM1OTc4NTExMDAwMDFjZjYyNDgiLCJpZCI6IjJkNzNkOGU3YzgwMDQ3NDY5ZmQ1OGMwZjJlNmQ0NmY5IiwiaCI6Im11cm11cjY0In0=';
 
 /**
- * Routing provider preference
+ * OpenRouteService Base URL
  */
-export type RoutingProvider = 'google' | 'openroute';
-export const ROUTING_PROVIDER: RoutingProvider = 'openroute'; // Default to OpenRouteService (free)
+export const ORS_BASE_URL = 'https://api.openrouteservice.org/v2';
 
 /**
  * Map display settings
@@ -82,28 +68,8 @@ export const MARKER_COLORS = {
 };
 
 /**
- * Check if Google Maps API key is configured
- */
-export const isGoogleMapsConfigured = (): boolean => {
-  return GOOGLE_MAPS_API_KEY !== 'YOUR_GOOGLE_MAPS_API_KEY_HERE' && GOOGLE_MAPS_API_KEY.length > 0;
-};
-
-/**
  * Check if OpenRouteService API key is configured
  */
 export const isOpenRouteServiceConfigured = (): boolean => {
-  return ORS_API_KEY.length > 0 && ORS_API_KEY !== 'YOUR_ORS_API_KEY_HERE';
-};
-
-/**
- * Get the active routing provider based on configuration
- */
-export const getActiveRoutingProvider = (): RoutingProvider => {
-  if (ROUTING_PROVIDER === 'google' && isGoogleMapsConfigured()) {
-    return 'google';
-  }
-  if (isOpenRouteServiceConfigured()) {
-    return 'openroute';
-  }
-  return ROUTING_PROVIDER;
+  return ORS_API_KEY.length > 0;
 };

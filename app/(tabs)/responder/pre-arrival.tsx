@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,87 +8,174 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
+import { Incident } from "@/src/types/incident.types";
+import { Dispatch } from "@/src/types/dispatch.types";
+import * as incidentService from "@/src/services/incident.service";
+import { Picker } from '@react-native-picker/picker';
 
 export default function PreArrivalFormScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const incidentId = params.id ? parseInt(params.id as string) : null;
+  const dispatchId = params.dispatchId ? parseInt(params.dispatchId as string) : null;
   const { user } = useAuth();
+  const { dispatches } = useDispatch();
 
-  const [formData, setFormData] = useState({
-    callerName: "",
-    patientName: "",
-    sex: "",
-    age: "",
-    typeOfIncident: "",
-    estimatedTimeOfArrival: "",
-  });
+  const [incident, setIncident] = useState<Incident | null>(null);
+  const [dispatch, setDispatch] = useState<Dispatch | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    // Validate form
-    if (!formData.callerName || !formData.patientName || !formData.sex || !formData.age) {
+  const [callerName, setCallerName] = useState("");
+  const [patientName, setPatientName] = useState("");
+  const [sex, setSex] = useState("");
+  const [age, setAge] = useState("");
+  const [additionalNotes, setAdditionalNotes] = useState("");
+
+  useEffect(() => {
+    loadData();
+  }, [incidentId, dispatchId]);
+
+  const loadData = async () => {
+    if (!incidentId) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const fetchedIncident = await incidentService.getIncident(incidentId);
+      setIncident(fetchedIncident);
+
+      // Find dispatch from context
+      if (dispatchId) {
+        const foundDispatch = dispatches.find(d => d.id === dispatchId);
+        if (foundDispatch) {
+          setDispatch(foundDispatch);
+          // Pre-populate caller name from reporter if available
+          if (foundDispatch.incident?.reporter?.name) {
+            setCallerName(foundDispatch.incident.reporter.name);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load data:", error);
+      Alert.alert("Error", "Failed to load incident details");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    // Validation
+    if (!callerName || !patientName || !sex || !age) {
       Alert.alert("Error", "Please fill in all required fields");
       return;
     }
 
-    // TODO: Submit to backend
-    Alert.alert("Success", "Pre-arrival information submitted", [
-      { text: "OK", onPress: () => router.back() },
-    ]);
+    if (!dispatchId) {
+      Alert.alert("Error", "No dispatch ID available");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // TODO: Implement backend API call
+      // await dispatchService.submitPreArrival(dispatchId, {
+      //   caller_name: callerName,
+      //   patient_name: patientName,
+      //   sex: sex,
+      //   age: parseInt(age),
+      //   notes: additionalNotes
+      // });
+
+      Alert.alert(
+        "Success",
+        "Pre-arrival information submitted successfully",
+        [{ text: "OK", onPress: () => router.back() }]
+      );
+    } catch (error) {
+      console.error("Failed to submit pre-arrival data:", error);
+      Alert.alert("Error", "Failed to submit. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header Banner */}
-      <View style={styles.headerBanner}>
-        <View style={styles.headerLeft}>
-          <View style={styles.logoContainer}>
-            <Ionicons name="medical" size={32} color={Colors.textWhite} />
-          </View>
-          <View style={styles.welcomeContainer}>
-            <Text style={styles.welcomeText}>WELCOME, {user?.name?.toUpperCase() || 'RESPONDER'}</Text>
-            <TouchableOpacity style={[styles.statusButton, styles.statusButtonActive]}>
-              <Text style={styles.statusButtonText}>Available</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        <TouchableOpacity style={styles.notificationButton}>
-          <Ionicons name="notifications" size={24} color={Colors.textWhite} />
-          <View style={styles.notificationDot} />
+      {/* Simple Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={Colors.textWhite} />
         </TouchableOpacity>
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerTitle}>Pre-Arrival Information</Text>
+          {dispatch && (
+            <Text style={styles.headerSubtitle}>
+              Dispatch #{dispatch.id} • {incident?.type || 'Unknown'}
+            </Text>
+          )}
+        </View>
       </View>
 
-      {/* Title */}
-      <View style={styles.titleContainer}>
-        <Text style={styles.screenTitle}>Pre Arrival Information Form Mo...</Text>
-      </View>
+      {/* Incident Context Card */}
+      {incident && (
+        <View style={styles.contextCard}>
+          <View style={styles.contextRow}>
+            <Ionicons name="location" size={16} color={Colors.textSecondary} />
+            <Text style={styles.contextText} numberOfLines={1}>{incident.address}</Text>
+          </View>
+          {dispatch && (
+            <View style={styles.contextRow}>
+              <Ionicons name="time" size={16} color={Colors.textSecondary} />
+              <Text style={styles.contextText}>
+                {dispatch.distance_text} • {dispatch.duration_text || 'Calculating...'}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Form */}
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.formContent}>
-        <Text style={styles.formTitle}>Patient Information</Text>
+        <Text style={styles.sectionTitle}>Patient Information</Text>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Caller Name:</Text>
+          <Text style={styles.label}>Caller Name</Text>
           <TextInput
             style={styles.input}
-            value={formData.callerName}
-            onChangeText={(text) => setFormData({ ...formData, callerName: text })}
-            placeholder="Enter caller name"
+            value={callerName}
+            onChangeText={setCallerName}
+            placeholder={dispatch?.incident?.reporter?.name || "Enter caller name"}
             placeholderTextColor="#999"
           />
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Patient Name:</Text>
+          <Text style={styles.label}>Patient Name</Text>
           <TextInput
             style={styles.input}
-            value={formData.patientName}
-            onChangeText={(text) => setFormData({ ...formData, patientName: text })}
+            value={patientName}
+            onChangeText={setPatientName}
             placeholder="Enter patient name"
             placeholderTextColor="#999"
           />
@@ -96,58 +183,63 @@ export default function PreArrivalFormScreen() {
 
         <View style={styles.row}>
           <View style={[styles.formGroup, styles.halfWidth]}>
-            <Text style={styles.label}>Sex:</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.sex}
-              onChangeText={(text) => setFormData({ ...formData, sex: text })}
-              placeholder="M/F"
-              placeholderTextColor="#999"
-            />
+            <Text style={styles.label}>Sex</Text>
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={sex}
+                onValueChange={setSex}
+                style={styles.picker}
+                dropdownIconColor={Colors.textWhite}
+              >
+                <Picker.Item label="Select..." value="" />
+                <Picker.Item label="Male" value="male" />
+                <Picker.Item label="Female" value="female" />
+                <Picker.Item label="Other" value="other" />
+                <Picker.Item label="Unknown" value="unknown" />
+              </Picker>
+            </View>
           </View>
 
           <View style={[styles.formGroup, styles.halfWidth]}>
-            <Text style={styles.label}>Age:</Text>
+            <Text style={styles.label}>Age</Text>
             <TextInput
               style={styles.input}
-              value={formData.age}
-              onChangeText={(text) => setFormData({ ...formData, age: text })}
+              value={age}
+              onChangeText={setAge}
+              keyboardType="number-pad"
               placeholder="Enter age"
               placeholderTextColor="#999"
-              keyboardType="numeric"
+              maxLength={3}
             />
           </View>
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Type of Incident:</Text>
+          <Text style={styles.label}>Additional Notes (Optional)</Text>
           <TextInput
-            style={styles.input}
-            value={formData.typeOfIncident}
-            onChangeText={(text) => setFormData({ ...formData, typeOfIncident: text })}
-            placeholder="Enter incident type"
+            style={[styles.input, styles.textArea]}
+            value={additionalNotes}
+            onChangeText={setAdditionalNotes}
+            placeholder="Any additional information..."
             placeholderTextColor="#999"
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
           />
         </View>
 
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Estimated Time of Arrival:</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.estimatedTimeOfArrival}
-            onChangeText={(text) => setFormData({ ...formData, estimatedTimeOfArrival: text })}
-            placeholder="e.g., 10 minutes"
-            placeholderTextColor="#999"
-          />
-        </View>
-
-        <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-          <Text style={styles.submitButtonText}>Submit</Text>
+        <TouchableOpacity
+          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+          onPress={handleSubmit}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color={Colors.textWhite} />
+          ) : (
+            <Text style={styles.submitButtonText}>Submit Information</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
-
-      {/* Bottom Red Section */}
-      <View style={styles.bottomSection} />
     </SafeAreaView>
   );
 }
@@ -157,93 +249,73 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.surface,
   },
-  headerBanner: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: Spacing.md,
+    fontSize: FontSizes.md,
+    color: Colors.textSecondary,
+  },
+  header: {
     backgroundColor: Colors.primary,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
   },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  logoContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: Colors.textWhite,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: Spacing.md,
-  },
-  welcomeContainer: {
-    flex: 1,
-  },
-  welcomeText: {
-    fontSize: FontSizes.sm,
-    fontWeight: "600",
-    color: Colors.textWhite,
-    marginBottom: Spacing.xs,
-  },
-  statusButton: {
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: 20,
-    alignSelf: "flex-start",
-  },
-  statusButtonActive: {
-    backgroundColor: "#10B981",
-  },
-  statusButtonText: {
-    fontSize: FontSizes.xs,
-    fontWeight: "600",
-    color: Colors.textWhite,
-  },
-  notificationButton: {
+  backButton: {
     width: 40,
     height: 40,
     justifyContent: "center",
     alignItems: "center",
-    position: "relative",
+    marginRight: Spacing.md,
   },
-  notificationDot: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#F59E0B",
+  headerInfo: {
+    flex: 1,
   },
-  titleContainer: {
-    backgroundColor: Colors.surface,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+  headerTitle: {
+    fontSize: FontSizes.lg,
+    fontWeight: "bold",
+    color: Colors.textWhite,
   },
-  screenTitle: {
+  headerSubtitle: {
     fontSize: FontSizes.sm,
-    fontWeight: "600",
-    color: Colors.textPrimary,
+    color: "rgba(255,255,255,0.8)",
+    marginTop: 2,
+  },
+  contextCard: {
+    backgroundColor: Colors.surface,
+    margin: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  contextRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  contextText: {
+    flex: 1,
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
   },
   scrollView: {
     flex: 1,
   },
   formContent: {
     padding: Spacing.lg,
-    backgroundColor: Colors.textWhite,
   },
-  formTitle: {
-    fontSize: FontSizes.xxl,
+  sectionTitle: {
+    fontSize: FontSizes.xl,
     fontWeight: "bold",
     color: Colors.textPrimary,
-    marginBottom: Spacing.xl,
-    fontFamily: "serif",
+    marginBottom: Spacing.lg,
   },
   formGroup: {
     marginBottom: Spacing.lg,
@@ -262,32 +334,45 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   input: {
-    backgroundColor: "#8B5A3C",
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
     borderRadius: BorderRadius.sm,
     padding: Spacing.md,
     fontSize: FontSizes.md,
-    color: Colors.textWhite,
+    color: Colors.textPrimary,
     minHeight: 48,
+  },
+  pickerContainer: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.sm,
+    overflow: "hidden",
+  },
+  picker: {
+    color: Colors.textPrimary,
+  },
+  textArea: {
+    minHeight: 100,
+    textAlignVertical: "top",
   },
   submitButton: {
     backgroundColor: Colors.primary,
     borderRadius: BorderRadius.md,
-    padding: Spacing.md,
+    padding: Spacing.lg,
     alignItems: "center",
     marginTop: Spacing.lg,
-    alignSelf: "flex-end",
-    minWidth: 120,
+    minHeight: 52,
+    justifyContent: "center",
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
   submitButtonText: {
     color: Colors.textWhite,
     fontSize: FontSizes.md,
     fontWeight: "600",
-  },
-  bottomSection: {
-    height: 100,
-    backgroundColor: Colors.primary,
-    borderTopLeftRadius: BorderRadius.lg,
-    borderTopRightRadius: BorderRadius.lg,
   },
 });
 

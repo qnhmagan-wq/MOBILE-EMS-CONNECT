@@ -44,11 +44,43 @@ export const updateDutyStatus = async (
   request: DutyStatusRequest
 ): Promise<DutyStatusResponse> => {
   try {
+    console.log('[Dispatch Service] Updating duty status:', {
+      endpoint: '/responder/status',
+      payload: request,
+      timestamp: new Date().toISOString()
+    });
+
     const response = await api.post<DutyStatusResponse>('/responder/status', request);
+
+    console.log('[Dispatch Service] Duty status updated successfully:', response.data);
     return response.data;
   } catch (error: any) {
-    console.error('[Dispatch Service] Update duty status error:', error.response?.data || error.message);
-    throw error;
+    const errorData = error.response?.data;
+    const statusCode = error.response?.status;
+
+    // Comprehensive error logging
+    console.error('[Dispatch Service] Update duty status error:', {
+      status: statusCode,
+      statusText: error.response?.statusText,
+      data: errorData,
+      message: error.message,
+      endpoint: '/responder/status',
+      payload: request,
+      timestamp: new Date().toISOString()
+    });
+
+    // Provide helpful error messages based on status code
+    if (statusCode === 500) {
+      throw new Error('Server error: The duty status endpoint may not be implemented yet on the backend. Please check backend API implementation.');
+    } else if (statusCode === 404) {
+      throw new Error('Duty status endpoint not found. The backend API route /responder/status may not exist.');
+    } else if (statusCode === 422) {
+      throw new Error(`Invalid payload format: ${errorData?.message || 'Backend expects different data format'}`);
+    } else if (statusCode === 401 || statusCode === 403) {
+      throw new Error('Authentication error: Please log in again.');
+    } else {
+      throw new Error(errorData?.message || `Failed to update duty status (Status: ${statusCode})`);
+    }
   }
 };
 

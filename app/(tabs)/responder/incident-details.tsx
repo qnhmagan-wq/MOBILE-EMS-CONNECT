@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Alert,
+  Linking,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -17,7 +18,9 @@ import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { Incident } from "@/src/types/incident.types";
 import { Dispatch, DispatchStatus } from "@/src/types/dispatch.types";
 import { DispatchStatusBadge } from "@/components/DispatchStatusBadge";
-import * as incidentService from "@/src/services/incident.service";
+import TimelineItem from "@/components/TimelineItem";
+import { getElapsedTime } from "@/src/utils/time";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export default function ResponderIncidentDetailsScreen() {
   const router = useRouter();
@@ -33,35 +36,33 @@ export default function ResponderIncidentDetailsScreen() {
   const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
-    if (incidentId) {
-      fetchIncident();
-      // Poll for updates
-      const interval = setInterval(fetchIncident, 10000);
-      return () => clearInterval(interval);
-    }
-  }, [incidentId]);
-
-  useEffect(() => {
-    // Find dispatch from context
+    // Get incident data from dispatch context (no API call needed)
+    // Dispatches are already fetched by DispatchContext polling
     if (dispatchId) {
       const found = dispatches.find(d => d.id === dispatchId);
-      if (found) {
+      if (found?.incident) {
         setDispatch(found);
+
+        // Convert dispatch.incident to Incident type
+        const incidentData: Incident = {
+          id: found.incident.id,
+          type: found.incident.type as any,
+          status: found.incident.status as any,
+          latitude: found.incident.latitude,
+          longitude: found.incident.longitude,
+          address: found.incident.address,
+          description: found.incident.description,
+          created_at: found.incident.created_at,
+          updated_at: found.incident.updated_at,
+          reporter_id: found.incident.reporter_id,
+        };
+        setIncident(incidentData);
+      } else {
+        console.warn('[IncidentDetails] Dispatch found but no incident data:', dispatchId);
       }
     }
+    setIsLoading(false);
   }, [dispatchId, dispatches]);
-
-  const fetchIncident = async () => {
-    if (!incidentId) return;
-    try {
-      const fetchedIncident = await incidentService.getIncident(incidentId);
-      setIncident(fetchedIncident);
-    } catch (error) {
-      console.error("Failed to fetch incident:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const getAvailableActions = (currentStatus: DispatchStatus) => {
     switch (currentStatus) {
@@ -122,25 +123,30 @@ export default function ResponderIncidentDetailsScreen() {
 
   if (isLoading) {
     return (
+      <ErrorBoundary>
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
       </SafeAreaView>
+      </ErrorBoundary>
     );
   }
 
   if (!incident) {
     return (
+      <ErrorBoundary>
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Incident not found</Text>
         </View>
       </SafeAreaView>
+      </ErrorBoundary>
     );
   }
 
   return (
+    <ErrorBoundary>
     <SafeAreaView style={styles.container}>
       {/* Header Banner */}
       <View style={styles.headerBanner}>
@@ -155,7 +161,25 @@ export default function ResponderIncidentDetailsScreen() {
         {/* Dispatch Status Badge */}
         {dispatch && (
           <View style={styles.statusContainer}>
-            <Text style={styles.statusLabel}>Dispatch Status:</Text>
+            <View>
+              <Text style={styles.statusLabel}>Dispatch Status:</Text>
+              {/* Elapsed time indicator */}
+              {dispatch.en_route_at && dispatch.status === 'en_route' && (
+                <Text style={styles.elapsedTime}>
+                  En route for {getElapsedTime(dispatch.en_route_at)}
+                </Text>
+              )}
+              {dispatch.assigned_at && dispatch.status === 'assigned' && (
+                <Text style={styles.elapsedTime}>
+                  Assigned {getElapsedTime(dispatch.assigned_at)} ago
+                </Text>
+              )}
+              {dispatch.arrived_at && dispatch.status === 'arrived' && (
+                <Text style={styles.elapsedTime}>
+                  At scene for {getElapsedTime(dispatch.arrived_at)}
+                </Text>
+              )}
+            </View>
             <DispatchStatusBadge status={dispatch.status} size="large" />
           </View>
         )}
@@ -199,12 +223,72 @@ export default function ResponderIncidentDetailsScreen() {
         {/* Reporter Info (if available) */}
         {dispatch?.incident?.reporter && (
           <View style={styles.incidentCard}>
-            <Text style={styles.descriptionLabel}>Reporter:</Text>
+            <Text style={styles.descriptionLabel}>Reporter Contact:</Text>
             <Text style={styles.descriptionText}>
               {dispatch.incident.reporter.name}
-              {'\n'}
-              {dispatch.incident.reporter.phone_number}
             </Text>
+            <TouchableOpacity
+              style={styles.phoneButton}
+              onPress={() => {
+                const phone = dispatch.incident.reporter.phone_number;
+                Linking.openURL(`tel:${phone}`);
+              }}
+            >
+              <Ionicons name="call" size={20} color="#10B981" />
+              <Text style={styles.phoneNumber}>
+                {dispatch.incident.reporter.phone_number}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Timeline Section */}
+        {dispatch && (
+          <View style={styles.timelineSection}>
+            <Text style={styles.sectionTitle}>Response Timeline</Text>
+
+            <TimelineItem
+              label="Incident Reported"
+              time={incident.created_at}
+              icon="alert-circle"
+              color="#EF4444"
+            />
+
+            <TimelineItem
+              label="Assigned to You"
+              time={dispatch.assigned_at}
+              icon="person-add"
+              color="#F59E0B"
+            />
+
+            <TimelineItem
+              label="Dispatch Accepted"
+              time={dispatch.accepted_at}
+              icon="checkmark-circle"
+              color="#3B82F6"
+            />
+
+            <TimelineItem
+              label="En Route"
+              time={dispatch.en_route_at}
+              icon="navigate"
+              color="#F59E0B"
+            />
+
+            <TimelineItem
+              label="Arrived at Scene"
+              time={dispatch.arrived_at}
+              icon="location"
+              color="#8B5CF6"
+            />
+
+            <TimelineItem
+              label="Incident Completed"
+              time={dispatch.completed_at}
+              icon="checkmark-done"
+              color="#10B981"
+              isLast={true}
+            />
           </View>
         )}
 
@@ -239,7 +323,7 @@ export default function ResponderIncidentDetailsScreen() {
 
           <TouchableOpacity
             style={[styles.actionButton, styles.navigateButton]}
-            onPress={() => router.push(`/(tabs)/responder/map?id=${incident.id}`)}
+            onPress={() => router.push(`/(tabs)/responder/map?id=${incident.id}&dispatchId=${dispatch?.id}`)}
           >
             <Ionicons name="navigate" size={24} color={Colors.textWhite} />
             <Text style={styles.actionButtonText}>Navigate</Text>
@@ -247,6 +331,7 @@ export default function ResponderIncidentDetailsScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
+    </ErrorBoundary>
   );
 }
 
@@ -313,6 +398,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.textPrimary,
   },
+  elapsedTime: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    marginTop: 4,
+    fontStyle: "italic",
+  },
   incidentCard: {
     backgroundColor: "#8B5A3C",
     borderRadius: BorderRadius.md,
@@ -360,6 +451,34 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     color: Colors.textWhite,
     lineHeight: 24,
+  },
+  phoneButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    backgroundColor: "rgba(16, 185, 129, 0.2)",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+  },
+  phoneNumber: {
+    fontSize: FontSizes.md,
+    color: "#10B981",
+    fontWeight: "600",
+  },
+  timelineSection: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  sectionTitle: {
+    fontSize: FontSizes.lg,
+    fontWeight: "bold",
+    color: Colors.textPrimary,
+    marginBottom: Spacing.lg,
   },
   statusActionsContainer: {
     marginTop: Spacing.lg,

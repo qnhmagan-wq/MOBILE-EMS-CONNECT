@@ -8,6 +8,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { Dispatch, DispatchNotificationData } from '@/src/types/dispatch.types';
+import OpenRouteService from './openroute.service';
 
 /**
  * Configure notification behavior
@@ -64,17 +65,44 @@ export const initializeNotifications = async (): Promise<boolean> => {
  */
 export const showDispatchNotification = async (dispatch: Dispatch): Promise<void> => {
   try {
+    // Get address - use reverse geocoding if needed
+    let address = dispatch.incident.address;
+
+    // Check if address looks like coordinates (contains numbers and comma)
+    const coordPattern = /^-?\d+\.?\d*,\s*-?\d+\.?\d*$/;
+    if (!address || coordPattern.test(address)) {
+      try {
+        console.log('[Notification Service] Address is coordinates, reverse geocoding...');
+        const resolvedAddress = await OpenRouteService.reverseGeocode(
+          dispatch.incident.latitude,
+          dispatch.incident.longitude
+        );
+
+        if (resolvedAddress) {
+          address = resolvedAddress;
+          console.log('[Notification Service] Resolved address:', address);
+        } else {
+          // Fallback to coordinates
+          address = `${dispatch.incident.latitude}, ${dispatch.incident.longitude}`;
+        }
+      } catch (error) {
+        console.error('[Notification Service] Reverse geocoding failed:', error);
+        // Fallback to coordinates
+        address = `${dispatch.incident.latitude}, ${dispatch.incident.longitude}`;
+      }
+    }
+
     const notificationData: DispatchNotificationData = {
       dispatchId: dispatch.id,
       incidentId: dispatch.incident_id,
       incidentType: dispatch.incident.type,
-      address: dispatch.incident.address,
+      address: address, // Use resolved address
     };
 
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🚨 New Emergency Dispatch',
-        body: `${getIncidentTypeLabel(dispatch.incident.type)} at ${dispatch.incident.address}`,
+        body: `${getIncidentTypeLabel(dispatch.incident.type)} at ${address}`,
         data: notificationData,
         sound: 'default',
         priority: Notifications.AndroidNotificationPriority.HIGH,
@@ -83,7 +111,7 @@ export const showDispatchNotification = async (dispatch: Dispatch): Promise<void
       trigger: null, // Show immediately
     });
 
-    console.log('[Notification Service] Dispatch notification shown:', dispatch.id);
+    console.log('[Notification Service] ✅ Dispatch notification shown with address:', address);
   } catch (error: any) {
     console.error('[Notification Service] Show notification error:', error.message);
   }

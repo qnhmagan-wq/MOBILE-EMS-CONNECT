@@ -16,8 +16,9 @@ import { useDispatchPolling } from '@/src/hooks/useDispatchPolling';
 import * as dispatchService from '@/src/services/dispatch.service';
 import * as locationService from '@/src/services/location.service';
 import * as notificationService from '@/src/services/notification.service';
+import { trackAction, ActionTypes } from '@/src/utils/actionTracking';
 
-const LOCATION_UPDATE_INTERVAL = 30000; // 30 seconds
+const LOCATION_UPDATE_INTERVAL = 15000; // 15 seconds (as per dev guide)
 
 export interface DispatchContextType {
   // Duty Status
@@ -124,6 +125,12 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       const newStatus: DutyStatus = dutyStatus === 'off_duty' ? 'on_duty' : 'off_duty';
 
+      // Track user action
+      trackAction(ActionTypes.DUTY_TOGGLE, {
+        from: dutyStatus,
+        to: newStatus
+      });
+
       if (newStatus === 'on_duty') {
         // TURNING ON DUTY
 
@@ -159,6 +166,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setDutyStatus('on_duty');
 
         console.log('[DispatchContext] Successfully went ON DUTY');
+        trackAction(ActionTypes.DUTY_ON, { success: true });
       } else {
         // TURNING OFF DUTY
 
@@ -176,9 +184,14 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setDutyStatus('off_duty');
 
         console.log('[DispatchContext] Successfully went OFF DUTY');
+        trackAction(ActionTypes.DUTY_OFF, { success: true });
       }
     } catch (err: any) {
       console.error('[DispatchContext] Toggle duty status error:', err);
+      trackAction(ActionTypes.DUTY_TOGGLE_FAILED, {
+        error: err.message,
+        from: dutyStatus,
+      });
       setError(err.message || 'Failed to update duty status');
       throw err;
     } finally {
