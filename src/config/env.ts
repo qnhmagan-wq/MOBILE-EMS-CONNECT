@@ -1,7 +1,7 @@
 // Production API URL - HARDCODED for release builds
 // In development, you can override with .env file
 const PRODUCTION_API_URL = 'https://emsconnect.online/api';
-const PRODUCTION_AGORA_APP_ID = 'c81a013cd0db4defabcbdb7d005fe627';
+const PRODUCTION_AGORA_APP_ID = 'c4cddb83dfe64cf19536d61427c97edd';
 
 // Determine the API URL
 // Priority: 1. Environment variable (for dev), 2. Production URL
