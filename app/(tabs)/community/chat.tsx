@@ -12,8 +12,10 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors, Spacing, BorderRadius, FontSizes } from '@/src/config/theme';
@@ -26,6 +28,7 @@ export default function ChatScreen() {
   const params = useLocalSearchParams();
   const incidentId = params.id ? parseInt(params.id as string) : null;
   const { user } = useAuth();
+  const isFocused = useIsFocused();
 
   const {
     messages,
@@ -36,24 +39,44 @@ export default function ChatScreen() {
     stopPolling,
     sendMessage,
     markMessagesAsRead,
+    refreshMessages,
     clearError,
   } = useMessagePolling();
 
   const [inputText, setInputText] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const [viewableMessageIds, setViewableMessageIds] = useState<Set<number>>(new Set());
 
-  // Start polling on mount
+  // Start/stop polling based on screen focus
   useEffect(() => {
-    if (incidentId) {
+    if (!incidentId) return;
+
+    if (isFocused) {
+      // Screen is focused - start polling
       startPolling(incidentId);
+    } else {
+      // Screen is not focused - stop polling to save battery
+      stopPolling();
     }
 
     return () => {
       stopPolling();
     };
-  }, [incidentId]);
+  }, [incidentId, isFocused]);
+
+  // Pull-to-refresh handler
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshMessages();
+    } catch (error) {
+      console.error('[Chat] Refresh error:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -183,6 +206,14 @@ export default function ChatScreen() {
         contentContainerStyle={styles.messagesList}
         onViewableItemsChanged={handleViewableItemsChanged}
         viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.primary}
+            colors={[Colors.primary]}
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="chatbubbles-outline" size={48} color={Colors.textSecondary} />

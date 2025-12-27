@@ -10,7 +10,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import { Message } from '@/src/types/message.types';
 import * as messageService from '@/src/services/message.service';
 
-const POLL_INTERVAL = 3000; // 3 seconds (as per requirements)
+const POLL_INTERVAL = 2000; // 3 seconds (as per requirements)
 
 export interface UseMessagePollingReturn {
   messages: Message[];
