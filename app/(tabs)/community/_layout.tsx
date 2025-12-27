@@ -47,11 +47,11 @@ export default function CommunityLayout() {
         }}
       />
       <Tabs.Screen
-        name="first-aid"
+        name="messages"
         options={{
-          title: "",
+          title: "Messages",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="medkit" size={size} color={color} />
+            <Ionicons name="chatbubbles" size={size} color={color} />
           ),
         }}
       />
@@ -65,7 +65,25 @@ export default function CommunityLayout() {
         }}
       />
       <Tabs.Screen
+        name="first-aid"
+        options={{
+          href: null, // Hide from tab bar
+        }}
+      />
+      <Tabs.Screen
         name="emergency-call"
+        options={{
+          href: null, // Hide from tab bar
+        }}
+      />
+      <Tabs.Screen
+        name="incident-details"
+        options={{
+          href: null, // Hide from tab bar
+        }}
+      />
+      <Tabs.Screen
+        name="chat"
         options={{
           href: null, // Hide from tab bar
         }}

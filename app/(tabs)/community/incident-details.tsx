@@ -12,6 +12,7 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import StatusBadge from "@/components/StatusBadge";
+import UnreadBadge from "@/components/UnreadBadge";
 import { Incident } from "@/src/types/incident.types";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import * as incidentService from "@/src/services/incident.service";
@@ -186,6 +187,21 @@ export default function IncidentDetailsScreen() {
           </View>
           <Text style={styles.sectionValue}>{incident.description}</Text>
         </View>
+
+        {/* Messages Button */}
+        {["pending", "dispatched", "in_progress"].includes(incident.status) && (
+          <TouchableOpacity
+            style={styles.messagesButton}
+            onPress={() => router.push(`/(tabs)/community/chat?id=${incident.id}`)}
+          >
+            <View style={styles.messagesButtonContent}>
+              <Ionicons name="chatbubbles" size={20} color={Colors.primary} />
+              <Text style={styles.messagesButtonText}>View Messages</Text>
+              <UnreadBadge incidentId={incident.id} size="small" />
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        )}
 
         {/* Timestamps */}
         <View style={styles.section}>
@@ -367,6 +383,27 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: FontSizes.md,
     fontWeight: "600",
+  },
+  messagesButton: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  messagesButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  messagesButtonText: {
+    fontSize: FontSizes.md,
+    fontWeight: "600",
+    color: Colors.primary,
   },
 });
 

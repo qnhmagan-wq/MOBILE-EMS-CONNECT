@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useIncidents } from "@/src/hooks/useIncidents";
 import StatusBadge from "@/components/StatusBadge";
+import UnreadBadge from "@/components/UnreadBadge";
 import { Incident } from "@/src/types/incident.types";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import * as incidentService from "@/src/services/incident.service";
@@ -133,6 +134,9 @@ export default function HistoryScreen() {
                   <Text style={styles.incidentType}>
                     {incident.type.charAt(0).toUpperCase() + incident.type.slice(1)}
                   </Text>
+                  {["pending", "dispatched", "in_progress"].includes(incident.status) && (
+                    <UnreadBadge incidentId={incident.id} size="small" />
+                  )}
                 </View>
                 <StatusBadge status={incident.status} size="small" />
               </View>
