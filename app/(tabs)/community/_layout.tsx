@@ -88,6 +88,18 @@ export default function CommunityLayout() {
           href: null, // Hide from tab bar
         }}
       />
+      <Tabs.Screen
+        name="incoming-call"
+        options={{
+          href: null, // Hide from tab bar
+        }}
+      />
+      <Tabs.Screen
+        name="active-incoming-call"
+        options={{
+          href: null, // Hide from tab bar
+        }}
+      />
     </Tabs>
   );
 }

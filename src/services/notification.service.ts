@@ -8,6 +8,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { Dispatch, DispatchNotificationData } from '@/src/types/dispatch.types';
+import { IncomingCall } from '@/src/types/call.types';
 import OpenRouteService from './openroute.service';
 
 /**
@@ -40,8 +41,9 @@ export const initializeNotifications = async (): Promise<boolean> => {
       return false;
     }
 
-    // Configure notification channel for Android
+    // Configure notification channels for Android
     if (Platform.OS === 'android') {
+      // Dispatch notifications channel
       await Notifications.setNotificationChannelAsync('dispatches', {
         name: 'Emergency Dispatches',
         importance: Notifications.AndroidImportance.HIGH,
@@ -50,6 +52,18 @@ export const initializeNotifications = async (): Promise<boolean> => {
         sound: 'default',
         enableVibrate: true,
         showBadge: true,
+      });
+
+      // Incoming calls channel
+      await Notifications.setNotificationChannelAsync('incoming_calls', {
+        name: 'Incoming Calls',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 500, 250, 500],
+        lightColor: '#8B2A2A',
+        sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       });
     }
 
@@ -192,5 +206,34 @@ export const hasNotificationPermission = async (): Promise<boolean> => {
   } catch (error: any) {
     console.error('[Notification Service] Permission check error:', error.message);
     return false;
+  }
+};
+
+/**
+ * Show notification for incoming admin call
+ */
+export const showIncomingCallNotification = async (call: IncomingCall): Promise<void> => {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '📞 Incoming Call from Admin',
+        body: `${call.admin_caller.name} is calling about incident #${call.incident_id}`,
+        data: {
+          callId: call.id,
+          type: 'incoming_call',
+          adminName: call.admin_caller.name,
+          incidentId: call.incident_id,
+        },
+        sound: 'default',
+        priority: Notifications.AndroidNotificationPriority.MAX,
+        vibrate: [0, 500, 250, 500],
+        categoryIdentifier: 'incoming_call',
+      },
+      trigger: null, // Show immediately
+    });
+
+    console.log('[Notification Service] ✅ Incoming call notification shown for call:', call.id);
+  } catch (error: any) {
+    console.error('[Notification Service] Show incoming call notification error:', error.message);
   }
 };

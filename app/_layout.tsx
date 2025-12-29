@@ -2,6 +2,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "@/src/contexts/AuthContext";
 import { DispatchProvider } from "@/src/contexts/DispatchContext";
+import { IncomingCallProvider } from "@/src/contexts/IncomingCallContext";
 import { View, ActivityIndicator, StyleSheet, Image } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import { Colors } from "@/src/config/theme";
@@ -83,7 +84,9 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <DispatchProvider>
-        <RootLayoutNav />
+        <IncomingCallProvider>
+          <RootLayoutNav />
+        </IncomingCallProvider>
       </DispatchProvider>
     </AuthProvider>
   );

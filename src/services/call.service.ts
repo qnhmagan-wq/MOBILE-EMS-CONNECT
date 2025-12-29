@@ -5,6 +5,11 @@ import {
   EndCallRequest,
   EndCallResponse,
   ActiveCallResponse,
+  IncomingCallResponse,
+  AnswerCallRequest,
+  AnswerCallResponse,
+  RejectCallRequest,
+  RejectCallResponse,
 } from '@/src/types/call.types';
 
 export const startCall = async (
@@ -30,6 +35,38 @@ export const endCall = async (request: EndCallRequest): Promise<EndCallResponse>
 export const getActiveCall = async (): Promise<ActiveCallResponse> => {
   try {
     const response = await api.get<ActiveCallResponse>('/call/active');
+    return response.data;
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+// Admin-initiated call endpoints
+export const pollIncomingCall = async (): Promise<IncomingCallResponse> => {
+  try {
+    const response = await api.get<IncomingCallResponse>('/call/incoming');
+    return response.data;
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+export const answerIncomingCall = async (
+  request: AnswerCallRequest
+): Promise<AnswerCallResponse> => {
+  try {
+    const response = await api.post<AnswerCallResponse>('/call/answer', request);
+    return response.data;
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+export const rejectIncomingCall = async (
+  request: RejectCallRequest
+): Promise<RejectCallResponse> => {
+  try {
+    const response = await api.post<RejectCallResponse>('/call/reject', request);
     return response.data;
   } catch (error: any) {
     throw error;

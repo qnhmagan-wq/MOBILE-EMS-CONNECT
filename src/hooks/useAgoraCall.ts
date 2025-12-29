@@ -15,6 +15,7 @@ interface UseAgoraCallReturn {
   startCall: (incidentId?: number) => Promise<{ success: boolean; error?: string }>;
   endCall: () => Promise<{ success: boolean; error?: string }>;
   toggleMute: () => Promise<void>;
+  answerCall: (callId: number, channelName: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useAgoraCall = (): UseAgoraCallReturn => {
@@ -201,10 +202,44 @@ export const useAgoraCall = (): UseAgoraCallReturn => {
     }
   };
 
+  // Answer incoming call (join existing Agora channel)
+  const answerCall = async (callId: number, channelName: string) => {
+    try {
+      console.log('[useAgoraCall] Answering incoming call:', callId, 'Channel:', channelName);
+      setCallState(prev => ({ ...prev, isConnecting: true }));
+
+      setCurrentCallId(callId);
+
+      // Join Agora channel (admin already created it)
+      if (agoraEngine.current) {
+        await agoraEngine.current.joinChannel(
+          '', // token (empty for App ID only mode)
+          channelName,
+          0, // uid (0 for auto-assign)
+          {
+            clientRoleType: ClientRoleType.ClientRoleBroadcaster,
+          }
+        );
+      }
+
+      console.log('[useAgoraCall] Joined Agora channel for incoming call');
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('[useAgoraCall] Failed to answer call:', error);
+      setCallState(prev => ({ ...prev, isConnecting: false }));
+      return {
+        success: false,
+        error: error.message || 'Failed to join voice channel'
+      };
+    }
+  };
+
   return {
     callState,
     startCall,
     endCall,
     toggleMute,
+    answerCall,
   };
 };
