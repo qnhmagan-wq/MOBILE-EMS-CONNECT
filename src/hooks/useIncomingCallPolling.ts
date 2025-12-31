@@ -17,6 +17,7 @@ interface UseIncomingCallPollingReturn {
   error: string | null;
   startPolling: (onNewCall: (call: IncomingCall) => void, onCallCanceled: () => void) => void;
   stopPolling: () => void;
+  pausePolling: () => void;
   clearError: () => void;
 }
 
@@ -52,17 +53,12 @@ export const useIncomingCallPolling = (): UseIncomingCallPollingReturn => {
           }
         }
       } else {
-        // No incoming call
-        if (incomingCall && lastSeenCallId.current) {
-          // Call was canceled by admin
-          console.log('[IncomingCallPolling] Call canceled by admin');
-          setIncomingCall(null);
-
-          // Notify callback
-          if (onCallCanceledRef.current) {
-            onCallCanceledRef.current();
-          }
-        }
+        // No incoming call from poll
+        // DON'T automatically clear - the call might still be ringing
+        // The backend returns has_incoming_call: false after the initial detection,
+        // even though the call is still active (ringing state)
+        // We'll handle clearing via answer/reject actions and polling pause
+        console.log('[IncomingCallPolling] No new incoming call in this poll');
       }
 
       // Clear error on successful poll
@@ -97,6 +93,26 @@ export const useIncomingCallPolling = (): UseIncomingCallPollingReturn => {
     },
     [isPolling, pollOnce]
   );
+
+  /**
+   * Pause polling (keeps state intact - for use during active call)
+   */
+  const pausePolling = useCallback(() => {
+    if (!isPolling) {
+      return;
+    }
+
+    console.log('[IncomingCallPolling] Pausing polling (keeping call state)');
+    setIsPolling(false);
+
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    // DON'T reset state - we're just pausing during active call
+    // Call state (incomingCall, lastSeenCallId) stays intact
+  }, [isPolling]);
 
   /**
    * Stop polling
@@ -135,6 +151,7 @@ export const useIncomingCallPolling = (): UseIncomingCallPollingReturn => {
     error,
     startPolling,
     stopPolling,
+    pausePolling,
     clearError,
   };
 };

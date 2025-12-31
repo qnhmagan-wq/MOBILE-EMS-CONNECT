@@ -29,12 +29,22 @@ export default function IncomingCallScreen() {
   }, []);
 
   // Auto-dismiss if call is canceled
+  // Add delay to prevent premature dismissal on mount
   useEffect(() => {
-    if (!incomingCall) {
-      if (router.canGoBack()) {
-        router.back();
+    // Give time for incomingCall to propagate from context (500ms)
+    const timeoutId = setTimeout(() => {
+      if (!incomingCall) {
+        console.log('[IncomingCallScreen] No incoming call found, auto-dismissing');
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/(tabs)/community/home');
+        }
       }
-    }
+    }, 500);
+
+    // Cleanup timeout on unmount or when incomingCall changes
+    return () => clearTimeout(timeoutId);
   }, [incomingCall, router]);
 
   const handleAnswer = async () => {
@@ -49,7 +59,7 @@ export default function IncomingCallScreen() {
 
       if (agoraResult.success) {
         // Navigate to active call screen
-        router.replace('/(tabs)/community/active-incoming-call');
+        router.replace('/active-incoming-call-modal');
       } else {
         // Failed to join Agora - error already shown by context
         console.error('[IncomingCall] Agora join failed:', agoraResult.error);

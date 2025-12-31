@@ -44,6 +44,7 @@ export const IncomingCallProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const [callState, setCallState] = useState<IncomingCallState>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [shouldNavigateToIncomingCall, setShouldNavigateToIncomingCall] = useState(false);
 
   const isAnsweringRef = useRef(false);
 
@@ -54,6 +55,7 @@ export const IncomingCallProvider: React.FC<{ children: React.ReactNode }> = ({ 
     error: pollingError,
     startPolling,
     stopPolling,
+    pausePolling,
     clearError: clearPollingError,
   } = useIncomingCallPolling();
 
@@ -62,39 +64,69 @@ export const IncomingCallProvider: React.FC<{ children: React.ReactNode }> = ({ 
    */
   const handleNewCall = useCallback(
     async (call: IncomingCall) => {
-      try {
-        console.log('[IncomingCall] New call from:', call.admin_caller.name);
+      console.log('[IncomingCall] ===== HANDLE NEW CALL START =====');
+      console.log('[IncomingCall] Call ID:', call.id);
+      console.log('[IncomingCall] Call from:', call.admin_caller.name);
+      console.log('[IncomingCall] Current callState:', callState);
+      console.log('[IncomingCall] Router available:', !!router);
 
-        // Check if already in a call (busy detection)
+      try {
+        console.log('[IncomingCall] Step 1: Checking for active calls...');
         const activeCall = await callService.getActiveCall();
         if (activeCall.call) {
           console.log('[IncomingCall] User is busy, auto-rejecting');
           await callService.rejectIncomingCall({ call_id: call.id });
           return;
         }
+        console.log('[IncomingCall] ✓ No active calls found');
 
-        // Check if already handling an incoming call
+        console.log('[IncomingCall] Step 2: Checking callState...');
         if (callState !== 'idle') {
           console.log('[IncomingCall] Already handling a call, auto-rejecting');
           await callService.rejectIncomingCall({ call_id: call.id });
           return;
         }
+        console.log('[IncomingCall] ✓ CallState is idle');
 
-        // Update state to ringing
+        console.log('[IncomingCall] Step 3: Setting state to ringing...');
         setCallState('ringing');
+        console.log('[IncomingCall] ✓ State updated to ringing');
 
-        // Start ringtone and vibration
+        console.log('[IncomingCall] Step 4: Starting ringtone...');
         await ringtoneService.playRingtone();
+        console.log('[IncomingCall] ✓ Ringtone started');
+
+        console.log('[IncomingCall] Step 5: Starting vibration...');
         await ringtoneService.startVibration();
+        console.log('[IncomingCall] ✓ Vibration started');
 
-        // Show notification
+        console.log('[IncomingCall] Step 6: Showing notification...');
         await notificationService.showIncomingCallNotification(call);
+        console.log('[IncomingCall] ✓ Notification shown');
 
-        // Navigate to incoming call screen
-        router.push('/(tabs)/community/incoming-call');
+        console.log('[IncomingCall] Step 7: NAVIGATING TO SCREEN...');
+        // Navigate immediately while all state is fresh
+        setTimeout(() => {
+          try {
+            console.log('[IncomingCall] Attempting navigation to /incoming-call-modal');
+            router.push('/incoming-call-modal');
+            console.log('[IncomingCall] ✓ Navigation successful');
+          } catch (navErr: any) {
+            console.error('[IncomingCall] ❌ Navigation failed:', navErr);
+            console.error('[IncomingCall] Falling back to flag-based navigation');
+            setShouldNavigateToIncomingCall(true);
+          }
+        }, 100); // Small delay to ensure state propagation
+        console.log('[IncomingCall] ✓ Navigation scheduled');
+
+        console.log('[IncomingCall] ===== HANDLE NEW CALL END (SUCCESS) =====');
       } catch (err: any) {
-        console.error('[IncomingCall] Handle new call error:', err);
+        console.error('[IncomingCall] ❌❌❌ HANDLE NEW CALL ERROR ❌❌❌');
+        console.error('[IncomingCall] Error type:', err?.constructor?.name);
+        console.error('[IncomingCall] Error message:', err?.message);
+        console.error('[IncomingCall] Error stack:', err?.stack);
         setError(err.message || 'Failed to process incoming call');
+        console.log('[IncomingCall] ===== HANDLE NEW CALL END (ERROR) =====');
       }
     },
     [callState, router]
@@ -150,6 +182,7 @@ export const IncomingCallProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       // Update state to connected
       setCallState('connected');
+      setShouldNavigateToIncomingCall(false); // Reset flag
 
       // Return channel info for Agora join (handled by screen)
       return {
@@ -194,6 +227,7 @@ export const IncomingCallProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       // Reset state
       setCallState('idle');
+      setShouldNavigateToIncomingCall(false); // Reset flag
 
       console.log('[IncomingCall] Call rejected successfully');
     } catch (err: any) {
@@ -225,6 +259,7 @@ export const IncomingCallProvider: React.FC<{ children: React.ReactNode }> = ({ 
       // Small delay before resetting to idle
       setTimeout(() => {
         setCallState('idle');
+        setShouldNavigateToIncomingCall(false); // Reset flag
       }, 500);
 
       console.log('[IncomingCall] Call ended successfully');
@@ -279,6 +314,49 @@ export const IncomingCallProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setError(pollingError);
     }
   }, [pollingError]);
+
+  /**
+   * Navigate to incoming call screen when state is ready
+   * This ensures incomingCall is available to the screen when it mounts
+   */
+  useEffect(() => {
+    console.log('[DEBUG] Navigation Effect Triggered');
+    console.log('[DEBUG] shouldNavigate:', shouldNavigateToIncomingCall);
+    console.log('[DEBUG] incomingCall:', incomingCall?.id || 'null');
+    console.log('[DEBUG] callState:', callState);
+
+    if (shouldNavigateToIncomingCall && incomingCall && callState === 'ringing') {
+      console.log('[IncomingCall] ===== NAVIGATING TO SCREEN =====');
+      console.log('[IncomingCall] State is ready - incomingCall:', incomingCall.id);
+      console.log('[IncomingCall] Call from:', incomingCall.admin_caller.name);
+
+      // Small delay to ensure React has fully rendered the context update
+      setTimeout(() => {
+        console.log('[IncomingCall] Executing navigation...');
+        try {
+          router.push('/incoming-call-modal');
+          console.log('[IncomingCall] ✓✓✓ Navigation successful! Screen should now have call data.');
+        } catch (navErr: any) {
+          console.error('[IncomingCall] ❌ Navigation error:', navErr);
+          // Fallback: try replace
+          try {
+            router.replace('/incoming-call-modal');
+            console.log('[IncomingCall] ✓ Fallback navigation successful');
+          } catch (replaceErr: any) {
+            console.error('[IncomingCall] ❌ Fallback also failed:', replaceErr);
+          }
+        }
+
+        // Reset flag
+        setShouldNavigateToIncomingCall(false);
+      }, 50); // Minimal delay just to ensure render cycle completes
+    } else {
+      console.log('[DEBUG] Navigation blocked:');
+      console.log('  - shouldNavigate:', shouldNavigateToIncomingCall);
+      console.log('  - hasIncomingCall:', !!incomingCall);
+      console.log('  - callState === ringing:', callState === 'ringing');
+    }
+  }, [shouldNavigateToIncomingCall, incomingCall, callState, router]);
 
   const value: IncomingCallContextType = {
     incomingCall,
