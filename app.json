@@ -13,8 +13,13 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Allow EMS Connect to access your microphone for emergency calls.",
-        "NSLocationWhenInUseUsageDescription": "Allow EMS Connect to access your location to report emergencies accurately and track your position when on duty for emergency dispatch.",
-        "UIBackgroundModes": ["location", "remote-notification"]
+        "NSLocationWhenInUseUsageDescription": "EMS Connect needs your location to show your position on the map and help responders find you during emergencies.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "EMS Connect needs continuous access to your location to track your position for emergency dispatch, even when the app is in the background or closed.",
+        "NSLocationAlwaysUsageDescription": "EMS Connect needs continuous access to your location to track your position for emergency dispatch, even when the app is in the background or closed.",
+        "UIBackgroundModes": ["location", "fetch", "remote-notification"]
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyC_OBg78CHbVJM3_k17wqfPQBlnh27bfa4"
       }
     },
     "android": {
@@ -32,8 +37,16 @@
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.POST_NOTIFICATIONS"
-      ]
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC_OBg78CHbVJM3_k17wqfPQBlnh27bfa4"
+        }
+      }
     },
     "web": {
       "output": "static",
@@ -46,6 +59,12 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "react-native-maps",
+        {
+          "googleMapsApiKey": "AIzaSyC_OBg78CHbVJM3_k17wqfPQBlnh27bfa4"
+        }
+      ],
       [
         "expo-location",
         {

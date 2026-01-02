@@ -148,3 +148,33 @@ export interface DispatchNotificationData {
   incidentType: string;
   address: string;
 }
+
+/**
+ * Pre-arrival information submission request
+ */
+export interface PreArrivalRequest {
+  patient_name: string;
+  sex: 'Male' | 'Female' | 'Other';
+  age: number;
+  incident_type: string;
+  caller_name?: string;
+  estimated_arrival?: string; // ISO8601 format
+}
+
+/**
+ * Pre-arrival information submission response
+ */
+export interface PreArrivalResponse {
+  message: string;
+  pre_arrival?: {
+    id: number;
+    dispatch_id: number;
+    patient_name: string;
+    sex: string;
+    age: number;
+    incident_type: string;
+    caller_name?: string;
+    estimated_arrival?: string;
+    created_at: string;
+  };
+}

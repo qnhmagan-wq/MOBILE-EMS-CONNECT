@@ -8,9 +8,8 @@ import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 export default function ResponderHomeScreen() {
   const { user } = useAuth();
   const {
-    isOnDuty,
-    isLocationTracking,
-    toggleDutyStatus,
+    isTrackingActive,
+    hasLocationPermission,
     isLoading,
     error,
     clearError,
@@ -45,101 +44,94 @@ export default function ResponderHomeScreen() {
           </View>
         )}
 
-        {/* Duty Toggle Card */}
-        <View style={styles.dutyToggleCard}>
-          <Text style={styles.dutyLabel}>Duty Status</Text>
-          <View style={styles.dutyToggleContainer}>
-            <View style={styles.dutyStatusInfo}>
-              <View style={[styles.dutyIndicator, { backgroundColor: isOnDuty ? '#10B981' : '#6B7280' }]} />
-              <Text style={styles.dutyStatusText}>
-                {isOnDuty ? 'ON DUTY' : 'OFF DUTY'}
-              </Text>
-            </View>
-            <Switch
-              value={isOnDuty}
-              onValueChange={toggleDutyStatus}
-              disabled={isLoading}
-              trackColor={{ false: '#D1D5DB', true: '#86EFAC' }}
-              thumbColor={isOnDuty ? '#10B981' : '#9CA3AF'}
-              ios_backgroundColor="#D1D5DB"
-            />
+        {/* Location Tracking Status */}
+        <View style={styles.trackingStatusCard}>
+          <View style={styles.trackingHeader}>
+            <Ionicons name="location" size={24} color={Colors.primary} />
+            <Text style={styles.trackingTitle}>Location Tracking</Text>
           </View>
-          {isLoading && (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" color={Colors.primary} />
-              <Text style={styles.loadingText}>Updating status...</Text>
+          <View style={styles.trackingStatusRow}>
+            <View style={[styles.trackingIndicator, {
+              backgroundColor: isTrackingActive ? '#10B981' : '#6B7280'
+            }]} />
+            <Text style={styles.trackingStatusText}>
+              {isTrackingActive ? 'ACTIVE (Background)' : 'INACTIVE'}
+            </Text>
+          </View>
+          {!hasLocationPermission && (
+            <View style={styles.permissionWarning}>
+              <Ionicons name="warning" size={16} color="#F59E0B" />
+              <Text style={styles.permissionWarningText}>
+                Location permission required for automatic tracking
+              </Text>
             </View>
           )}
         </View>
 
         {/* Active Services Indicators */}
-        {isOnDuty && (
-          <View style={styles.servicesCard}>
-            <Text style={styles.servicesLabel}>Active Services</Text>
-            <View style={styles.servicesList}>
-              <View style={styles.serviceItem}>
-                <Ionicons
-                  name="location"
-                  size={20}
-                  color={isLocationTracking ? '#10B981' : '#6B7280'}
-                />
-                <Text style={[styles.serviceText, { color: isLocationTracking ? '#10B981' : '#6B7280' }]}>
-                  Location Tracking
-                </Text>
-                {isLocationTracking && (
-                  <View style={styles.activeIndicator} />
-                )}
-              </View>
-              <View style={styles.serviceItem}>
-                <Ionicons
-                  name="notifications"
-                  size={20}
-                  color={isOnDuty ? '#10B981' : '#6B7280'}
-                />
-                <Text style={[styles.serviceText, { color: isOnDuty ? '#10B981' : '#6B7280' }]}>
-                  Dispatch Monitoring
-                </Text>
-                {isOnDuty && (
-                  <View style={styles.activeIndicator} />
-                )}
-              </View>
+        <View style={styles.servicesCard}>
+          <Text style={styles.servicesLabel}>Active Services</Text>
+          <View style={styles.servicesList}>
+            <View style={styles.serviceItem}>
+              <Ionicons
+                name="location"
+                size={20}
+                color={isTrackingActive ? '#10B981' : '#6B7280'}
+              />
+              <Text style={[styles.serviceText, { color: isTrackingActive ? '#10B981' : '#6B7280' }]}>
+                Background Location
+              </Text>
+              {isTrackingActive && (
+                <View style={styles.activeIndicator} />
+              )}
+            </View>
+            <View style={styles.serviceItem}>
+              <Ionicons
+                name="notifications"
+                size={20}
+                color={isTrackingActive ? '#10B981' : '#6B7280'}
+              />
+              <Text style={[styles.serviceText, { color: isTrackingActive ? '#10B981' : '#6B7280' }]}>
+                Dispatch Monitoring
+              </Text>
+              {isTrackingActive && (
+                <View style={styles.activeIndicator} />
+              )}
             </View>
           </View>
-        )}
+        </View>
 
         {/* Active Dispatches Summary */}
-        {isOnDuty && (
-          <View style={styles.dispatchSummaryCard}>
-            <View style={styles.summaryHeader}>
-              <Ionicons name="flash" size={24} color={Colors.primary} />
-              <Text style={styles.summaryTitle}>Active Dispatches</Text>
-            </View>
-            <Text style={styles.summaryCount}>
-              {activeDispatches.length} {activeDispatches.length === 1 ? 'dispatch' : 'dispatches'}
-            </Text>
+        <View style={styles.dispatchSummaryCard}>
+          <View style={styles.summaryHeader}>
+            <Ionicons name="flash" size={24} color={Colors.primary} />
+            <Text style={styles.summaryTitle}>Active Dispatches</Text>
           </View>
-        )}
+          <Text style={styles.summaryCount}>
+            {activeDispatches.length} {activeDispatches.length === 1 ? 'dispatch' : 'dispatches'}
+          </Text>
+        </View>
 
         {/* Info Card */}
         <View style={styles.infoCard}>
           <Ionicons name="information-circle" size={24} color={Colors.primary} />
           <Text style={styles.infoText}>
-            {isOnDuty
-              ? "You are currently on duty. You will receive notifications for emergency assignments."
-              : "Toggle duty status to ON to start receiving emergency dispatch assignments."
+            {isTrackingActive
+              ? "Background location tracking is active. You will receive notifications for emergency assignments even when the app is closed."
+              : "Grant location permission to enable automatic background tracking and receive emergency dispatch assignments."
             }
           </Text>
         </View>
 
         {/* Ready/Offline Card */}
-        <View style={[styles.readyCard, { backgroundColor: isOnDuty ? '#f0fdf4' : '#f3f4f6', borderColor: isOnDuty ? '#10B981' : '#9CA3AF' }]}>
+        <View style={[styles.readyCard, { backgroundColor: isTrackingActive ? '#f0fdf4' : '#f3f4f6', borderColor: isTrackingActive ? '#10B981' : '#9CA3AF' }]}>
           <Ionicons
-            name={isOnDuty ? "checkmark-circle" : "moon"}
+            name={isTrackingActive ? "checkmark-circle" : "moon"}
             size={32}
-            color={isOnDuty ? '#10B981' : '#6B7280'}
+            color={isTrackingActive ? '#10B981' : '#6B7280'}
           />
-          <Text style={[styles.readyText, { color: isOnDuty ? '#10B981' : '#6B7280' }]}>
-            {isOnDuty ? 'Ready for Dispatch' : 'Currently Offline'}
+          <Text style={[styles.readyText, { color: isTrackingActive ? '#10B981' : '#6B7280' }]}>
+            {isTrackingActive ? 'Ready for Dispatch' : 'Waiting for Permission'}
           </Text>
         </View>
       </ScrollView>
@@ -214,60 +206,54 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.textWhite,
   },
-  // Duty Toggle Card
-  dutyToggleCard: {
+  // Tracking Status Card
+  trackingStatusCard: {
     backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
+    borderRadius: BorderRadius.md,
     padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-    borderWidth: 2,
-    borderColor: Colors.primary,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  dutyLabel: {
-    fontSize: FontSizes.sm,
-    color: Colors.textSecondary,
     marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  trackingHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: Spacing.md,
+    gap: Spacing.sm,
+  },
+  trackingTitle: {
+    fontSize: FontSizes.lg,
     fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  dutyToggleContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  dutyStatusInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  dutyIndicator: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    marginRight: Spacing.sm,
-  },
-  dutyStatusText: {
-    fontSize: FontSizes.xl,
-    fontWeight: "bold",
     color: Colors.textPrimary,
   },
-  loadingRow: {
+  trackingStatusRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: Spacing.md,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    gap: Spacing.sm,
   },
-  loadingText: {
+  trackingIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  trackingStatusText: {
+    fontSize: FontSizes.md,
+    fontWeight: "600",
+    color: Colors.textPrimary,
+  },
+  permissionWarning: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginTop: Spacing.md,
+    padding: Spacing.sm,
+    backgroundColor: "#FEF3C7",
+    borderRadius: BorderRadius.sm,
+  },
+  permissionWarningText: {
     fontSize: FontSizes.sm,
-    color: Colors.textSecondary,
-    marginLeft: Spacing.sm,
+    color: "#92400E",
+    flex: 1,
   },
   // Services Card
   servicesCard: {

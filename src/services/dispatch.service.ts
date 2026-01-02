@@ -18,6 +18,8 @@ import {
   UpdateDispatchStatusRequest,
   UpdateDispatchStatusResponse,
   Dispatch,
+  PreArrivalRequest,
+  PreArrivalResponse,
 } from '@/src/types/dispatch.types';
 
 /**
@@ -71,7 +73,9 @@ export const updateDutyStatus = async (
 
     // Provide helpful error messages based on status code
     if (statusCode === 500) {
-      throw new Error('Server error: The duty status endpoint may not be implemented yet on the backend. Please check backend API implementation.');
+      console.warn('[Dispatch Service] Backend returned 500 for duty status (will retry on next app start)');
+      // Don't throw - let the caller handle this gracefully
+      throw new Error('BACKEND_500'); // Special error code for graceful handling
     } else if (statusCode === 404) {
       throw new Error('Duty status endpoint not found. The backend API route /responder/status may not exist.');
     } else if (statusCode === 422) {
@@ -114,6 +118,39 @@ export const updateDispatchStatus = async (
     return response.data;
   } catch (error: any) {
     console.error('[Dispatch Service] Update dispatch status error:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+/**
+ * Submit pre-arrival patient information
+ * POST /api/responder/dispatches/:dispatchId/pre-arrival
+ */
+export const submitPreArrival = async (
+  dispatchId: number,
+  request: PreArrivalRequest
+): Promise<PreArrivalResponse> => {
+  try {
+    console.log('[Dispatch Service] Submitting pre-arrival info:', {
+      dispatchId,
+      payload: request,
+      timestamp: new Date().toISOString()
+    });
+
+    const response = await api.post<PreArrivalResponse>(
+      `/responder/dispatches/${dispatchId}/pre-arrival`,
+      request
+    );
+
+    console.log('[Dispatch Service] Pre-arrival submitted successfully:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('[Dispatch Service] Submit pre-arrival error:', {
+      status: error.response?.status,
+      data: error.response?.data || error.message,
+      dispatchId,
+      timestamp: new Date().toISOString()
+    });
     throw error;
   }
 };

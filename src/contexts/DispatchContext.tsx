@@ -17,23 +17,27 @@ import * as dispatchService from '@/src/services/dispatch.service';
 import * as locationService from '@/src/services/location.service';
 import * as notificationService from '@/src/services/notification.service';
 import { trackAction, ActionTypes } from '@/src/utils/actionTracking';
+import {
+  startBackgroundLocationTracking,
+  stopBackgroundLocationTracking,
+  requestBackgroundLocationPermissions,
+  isBackgroundTrackingActive,
+} from '@/src/services/backgroundLocation.service';
+import { useAuth } from './AuthContext';
 
 const LOCATION_UPDATE_INTERVAL = 15000; // 15 seconds (as per dev guide)
 
 export interface DispatchContextType {
-  // Duty Status
-  dutyStatus: DutyStatus;
-  isOnDuty: boolean;
-
   // Location Tracking
-  isLocationTracking: boolean;
+  isTrackingActive: boolean;
+  hasLocationPermission: boolean;
 
   // Dispatches
   dispatches: Dispatch[];
   activeDispatches: Dispatch[];
 
   // Actions
-  toggleDutyStatus: () => Promise<void>;
+  autoStartTracking: () => Promise<void>;
   updateDispatchStatus: (dispatchId: number, status: DispatchStatus) => Promise<void>;
   refreshDispatches: () => Promise<void>;
 
@@ -46,12 +50,11 @@ export interface DispatchContextType {
 const DispatchContext = createContext<DispatchContextType | undefined>(undefined);
 
 export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [dutyStatus, setDutyStatus] = useState<DutyStatus>('off_duty');
-  const [isLocationTracking, setIsLocationTracking] = useState(false);
+  const { user } = useAuth();
+  const [isTrackingActive, setIsTrackingActive] = useState(false);
+  const [hasLocationPermission, setHasLocationPermission] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const locationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Use dispatch polling hook
   const {
@@ -66,138 +69,70 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     clearError: clearPollingError,
   } = useDispatchPolling();
 
+
   /**
-   * Start location tracking (foreground-only)
+   * Automatically start location tracking when permission is granted
+   * Called on app entry and after permission grant
    */
-  const startLocationTracking = useCallback(async () => {
+  const autoStartTracking = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
     try {
-      console.log('[DispatchContext] Starting location tracking');
+      console.log('[DispatchContext] Auto-starting location tracking...');
 
-      // Initial location update
-      const location = await locationService.getCurrentLocation();
-      await dispatchService.updateLocation({
-        latitude: location.latitude,
-        longitude: location.longitude,
-      });
+      // Request permissions
+      const locationPerm = await requestBackgroundLocationPermissions();
+      setHasLocationPermission(locationPerm.granted);
 
-      // Set up interval for periodic updates
-      locationIntervalRef.current = setInterval(async () => {
-        try {
-          const location = await locationService.getCurrentLocation();
-          await dispatchService.updateLocation({
-            latitude: location.latitude,
-            longitude: location.longitude,
-          });
-          console.log('[DispatchContext] Location updated');
-        } catch (error: any) {
-          console.error('[DispatchContext] Location update error:', error.message);
-        }
-      }, LOCATION_UPDATE_INTERVAL);
+      if (!locationPerm.granted) {
+        console.log('[DispatchContext] Location permission denied, cannot start tracking');
+        setIsLoading(false);
+        return;
+      }
 
-      setIsLocationTracking(true);
-    } catch (error: any) {
-      console.error('[DispatchContext] Start location tracking error:', error);
-      throw error;
-    }
-  }, []);
+      // Request notification permission
+      const notifPerm = await notificationService.initializeNotifications();
+      if (!notifPerm) {
+        Alert.alert(
+          'Notification Permission',
+          'Notifications are disabled. You may not receive dispatch alerts.',
+          [{ text: 'OK' }]
+        );
+      }
 
-  /**
-   * Stop location tracking
-   */
-  const stopLocationTracking = useCallback(() => {
-    console.log('[DispatchContext] Stopping location tracking');
-
-    if (locationIntervalRef.current) {
-      clearInterval(locationIntervalRef.current);
-      locationIntervalRef.current = null;
-    }
-
-    setIsLocationTracking(false);
-  }, []);
-
-  /**
-   * Toggle duty status (on/off)
-   */
-  const toggleDutyStatus = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const newStatus: DutyStatus = dutyStatus === 'off_duty' ? 'on_duty' : 'off_duty';
-
-      // Track user action
-      trackAction(ActionTypes.DUTY_TOGGLE, {
-        from: dutyStatus,
-        to: newStatus
-      });
-
-      if (newStatus === 'on_duty') {
-        // TURNING ON DUTY
-
-        // 1. Request location permission
-        const locationPerm = await locationService.requestLocationPermissions();
-        if (!locationPerm.granted) {
-          throw new Error('Location permission is required to go on duty');
-        }
-
-        // 2. Request notification permission
-        const notifPerm = await notificationService.initializeNotifications();
-        if (!notifPerm) {
-          Alert.alert(
-            'Notification Permission',
-            'Notifications are disabled. You won\'t receive alerts for new dispatches.',
-            [{ text: 'OK' }]
-          );
-        }
-
-        // 3. Update backend duty status
+      // Update backend duty status (keep trying even if it fails)
+      try {
         await dispatchService.updateDutyStatus({
           is_on_duty: true,
           responder_status: 'idle',
         });
-
-        // 4. Start location tracking
-        await startLocationTracking();
-
-        // 5. Start dispatch polling
-        startPolling();
-
-        // 6. Update local state
-        setDutyStatus('on_duty');
-
-        console.log('[DispatchContext] Successfully went ON DUTY');
-        trackAction(ActionTypes.DUTY_ON, { success: true });
-      } else {
-        // TURNING OFF DUTY
-
-        // 1. Stop services
-        stopPolling();
-        stopLocationTracking();
-
-        // 2. Update backend duty status
-        await dispatchService.updateDutyStatus({
-          is_on_duty: false,
-          responder_status: 'offline',
-        });
-
-        // 3. Update local state
-        setDutyStatus('off_duty');
-
-        console.log('[DispatchContext] Successfully went OFF DUTY');
-        trackAction(ActionTypes.DUTY_OFF, { success: true });
+        console.log('[DispatchContext] Backend duty status updated successfully');
+      } catch (error: any) {
+        console.error('[DispatchContext] Backend duty status failed (continuing anyway):', error.message);
+        // Don't throw - continue with local tracking even if backend fails
       }
-    } catch (err: any) {
-      console.error('[DispatchContext] Toggle duty status error:', err);
-      trackAction(ActionTypes.DUTY_TOGGLE_FAILED, {
-        error: err.message,
-        from: dutyStatus,
-      });
-      setError(err.message || 'Failed to update duty status');
-      throw err;
+
+      // Start background location tracking
+      await startBackgroundLocationTracking();
+      setIsTrackingActive(true);
+
+      // Start dispatch polling
+      startPolling();
+
+      console.log('[DispatchContext] Auto-start complete: tracking active');
+    } catch (error: any) {
+      console.error('[DispatchContext] Auto-start failed:', error);
+      setError(error.message || 'Failed to start location tracking');
+      Alert.alert(
+        'Location Tracking Error',
+        'Failed to start automatic location tracking. Please check your permissions.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [dutyStatus, startLocationTracking, stopLocationTracking, startPolling, stopPolling]);
+  }, [startPolling]);
 
   /**
    * Update dispatch status wrapper
@@ -223,15 +158,31 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [clearPollingError]);
 
   /**
-   * Cleanup on unmount
+   * Auto-start tracking when responder enters the app
+   * Only runs if location permission is granted
    */
   useEffect(() => {
-    return () => {
-      if (locationIntervalRef.current) {
-        clearInterval(locationIntervalRef.current);
+    if (!user || user.role !== 'responder') return;
+
+    console.log('[DispatchContext] Responder detected, checking auto-start...');
+
+    // Check if already tracking
+    isBackgroundTrackingActive().then((isActive) => {
+      if (isActive) {
+        console.log('[DispatchContext] Background tracking already active');
+        setIsTrackingActive(true);
+        startPolling();
+      } else {
+        console.log('[DispatchContext] Starting auto-start sequence...');
+        autoStartTracking();
       }
+    });
+
+    // Cleanup on unmount
+    return () => {
+      stopPolling();
     };
-  }, []);
+  }, [user, autoStartTracking, startPolling, stopPolling]);
 
   /**
    * Sync error from polling hook
@@ -243,12 +194,11 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [pollingError]);
 
   const value: DispatchContextType = {
-    dutyStatus,
-    isOnDuty: dutyStatus === 'on_duty',
-    isLocationTracking,
+    isTrackingActive,
+    hasLocationPermission,
     dispatches,
     activeDispatches,
-    toggleDutyStatus,
+    autoStartTracking,
     updateDispatchStatus,
     refreshDispatches,
     isLoading,

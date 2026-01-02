@@ -37,10 +37,7 @@ export default function ResponderLayout() {
       <Tabs.Screen
         name="map"
         options={{
-          title: "Map",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="location" size={size} color={color} />
-          ),
+          href: null, // Hidden from tab bar but still navigable
         }}
       />
       <Tabs.Screen
@@ -56,9 +53,15 @@ export default function ResponderLayout() {
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ color, size}) => (
             <Ionicons name="person" size={size} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="incident-details"
+        options={{
+          href: null, // Prevents Expo Router auto-registration conflict
         }}
       />
     </Tabs>

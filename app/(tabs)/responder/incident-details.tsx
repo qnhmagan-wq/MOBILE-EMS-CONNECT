@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { DispatchStatusBadge } from "@/components/DispatchStatusBadge";
 import TimelineItem from "@/components/TimelineItem";
 import { getElapsedTime } from "@/src/utils/time";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { PreArrivalModal } from "@/src/components/PreArrivalModal";
 
 export default function ResponderIncidentDetailsScreen() {
   const router = useRouter();
@@ -34,6 +35,8 @@ export default function ResponderIncidentDetailsScreen() {
   const [dispatch, setDispatch] = useState<Dispatch | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showPreArrivalModal, setShowPreArrivalModal] = useState(false);
+  const isMounted = useRef(true); // Track if component is mounted
 
   useEffect(() => {
     // Get incident data from dispatch context (no API call needed)
@@ -63,6 +66,13 @@ export default function ResponderIncidentDetailsScreen() {
     }
     setIsLoading(false);
   }, [dispatchId, dispatches]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const getAvailableActions = (currentStatus: DispatchStatus) => {
     switch (currentStatus) {
@@ -102,15 +112,31 @@ export default function ResponderIncidentDetailsScreen() {
             setIsUpdating(true);
             try {
               await updateStatus(dispatch.id, newStatus);
-              Alert.alert('Success', `Status updated to ${newStatus.replace('_', ' ')}`);
 
-              // If completed, go back to incidents list
+              // For completed status: navigate after user dismisses alert
+              // This ensures all state updates finish before navigation
               if (newStatus === 'completed') {
-                setTimeout(() => {
-                  router.back();
-                }, 1000);
+                Alert.alert(
+                  'Success',
+                  'Incident completed successfully!',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => {
+                        // Only navigate if component still mounted
+                        if (isMounted.current) {
+                          router.back();
+                        }
+                      },
+                    },
+                  ]
+                );
+              } else {
+                // For other statuses, just show success message
+                Alert.alert('Success', `Status updated to ${newStatus.replace('_', ' ')}`);
               }
             } catch (error: any) {
+              console.error('[IncidentDetails] Status update error:', error);
               Alert.alert('Error', 'Failed to update status. Please try again.');
             } finally {
               setIsUpdating(false);
@@ -315,21 +341,35 @@ export default function ResponderIncidentDetailsScreen() {
         <View style={styles.actionsContainer}>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => router.push(`/(tabs)/responder/pre-arrival?id=${incident.id}`)}
+            onPress={() => setShowPreArrivalModal(true)}
           >
             <Ionicons name="document-text" size={24} color={Colors.textWhite} />
-            <Text style={styles.actionButtonText}>Pre-Arrival Form</Text>
+            <Text style={styles.actionButtonText}>Pre-Arrival Info (Optional)</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.actionButton, styles.navigateButton]}
-            onPress={() => router.push(`/(tabs)/responder/map?id=${incident.id}&dispatchId=${dispatch?.id}`)}
+            onPress={() => router.push(`/(tabs)/responder/route-map?id=${incident.id}&dispatchId=${dispatch?.id}`)}
           >
             <Ionicons name="navigate" size={24} color={Colors.textWhite} />
             <Text style={styles.actionButtonText}>Navigate</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Pre-Arrival Modal */}
+      {dispatch && (
+        <PreArrivalModal
+          visible={showPreArrivalModal}
+          onClose={() => setShowPreArrivalModal(false)}
+          dispatchId={dispatch.id}
+          incidentType={incident?.type}
+          callerNameDefault={dispatch.incident?.reporter?.name}
+          onSuccess={() => {
+            console.log('[IncidentDetails] Pre-arrival info submitted successfully');
+          }}
+        />
+      )}
     </SafeAreaView>
     </ErrorBoundary>
   );
@@ -526,6 +566,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
 
 
 
