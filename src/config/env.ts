@@ -31,3 +31,6 @@ console.log('[ENV CONFIG] API_BASE_URL:', ENV.API_BASE_URL);
 console.log('[ENV CONFIG] Environment:', typeof __DEV__ !== 'undefined' && __DEV__ ? 'development' : 'production');
 
 export default ENV;
+
+// Google Maps API Key for Directions API
+export const GOOGLE_MAPS_API_KEY = 'AIzaSyC_OBg78CHbVJM3_k17wqfPQBlnh27bfa4';

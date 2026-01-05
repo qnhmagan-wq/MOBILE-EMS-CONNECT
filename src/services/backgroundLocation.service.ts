@@ -79,9 +79,14 @@ export const requestBackgroundLocationPermissions = async (): Promise<{
 
 /**
  * Start background location tracking
+ * **FIX #6: Added retry logic for reliability**
  */
-export const startBackgroundLocationTracking = async (): Promise<void> => {
+export const startBackgroundLocationTracking = async (retryCount = 0): Promise<void> => {
+  const MAX_RETRIES = 3;
+
   try {
+    console.log('[Background Location] Starting background location tracking');
+
     // Check if task is already running
     const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
     if (isRegistered) {
@@ -89,10 +94,17 @@ export const startBackgroundLocationTracking = async (): Promise<void> => {
       return;
     }
 
+    // Request foreground permission first
+    const { granted } = await Location.requestForegroundPermissionsAsync();
+    if (!granted) {
+      throw new Error('Foreground location permission denied');
+    }
+
+    // **FIX #7: Reduced interval from 15s to 10s for faster updates**
     // Start background location updates
     await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
       accuracy: Location.Accuracy.High,
-      timeInterval: 15000, // Update every 15 seconds
+      timeInterval: 10000, // Update every 10 seconds (reduced from 15000)
       distanceInterval: 0, // Update on every position change
       foregroundService: {
         notificationTitle: 'EMS Connect Active',
@@ -103,10 +115,23 @@ export const startBackgroundLocationTracking = async (): Promise<void> => {
       showsBackgroundLocationIndicator: true, // iOS: show blue bar
     });
 
-    console.log('[Background Location] Background tracking started');
+    console.log('[Background Location] Background tracking started successfully');
   } catch (error: any) {
-    console.error('[Background Location] Failed to start tracking:', error);
-    throw error;
+    console.error('[Background Location] Failed to start:', error);
+
+    // **FIX #6: Retry logic**
+    if (retryCount < MAX_RETRIES) {
+      console.log(`[Background Location] Retrying... (${retryCount + 1}/${MAX_RETRIES})`);
+
+      // Wait 2 seconds before retry
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Retry
+      return startBackgroundLocationTracking(retryCount + 1);
+    } else {
+      console.error('[Background Location] Max retries reached, background tracking failed');
+      throw error;
+    }
   }
 };
 

@@ -113,9 +113,27 @@ export default function ResponderIncidentDetailsScreen() {
             try {
               await updateStatus(dispatch.id, newStatus);
 
+              // **FIX #2: Auto-navigate to route-map after accepting**
+              if (newStatus === 'accepted') {
+                console.log('[Incident Details] Navigating to route-map for pre-arrival');
+                if (isMounted.current && incident) {
+                  // Serialize incident data for safe URL transmission
+                  const incidentData = encodeURIComponent(JSON.stringify({
+                    id: incident.id,
+                    type: incident.type,
+                    latitude: incident.latitude,
+                    longitude: incident.longitude,
+                    address: incident.address,
+                    description: incident.description,
+                  }));
+                  router.push(
+                    `/(tabs)/responder/route-map?id=${incident.id}&dispatchId=${dispatch.id}&autoStart=true&incidentData=${incidentData}`
+                  );
+                }
+              }
               // For completed status: navigate after user dismisses alert
               // This ensures all state updates finish before navigation
-              if (newStatus === 'completed') {
+              else if (newStatus === 'completed') {
                 Alert.alert(
                   'Success',
                   'Incident completed successfully!',
@@ -349,7 +367,23 @@ export default function ResponderIncidentDetailsScreen() {
 
           <TouchableOpacity
             style={[styles.actionButton, styles.navigateButton]}
-            onPress={() => router.push(`/(tabs)/responder/route-map?id=${incident.id}&dispatchId=${dispatch?.id}`)}
+            onPress={() => {
+              if (!dispatchId || !incident) {
+                Alert.alert('Error', 'Unable to start navigation. Missing dispatch or incident data.');
+                return;
+              }
+              const incidentData = encodeURIComponent(JSON.stringify({
+                id: incident.id,
+                type: incident.type,
+                latitude: incident.latitude,
+                longitude: incident.longitude,
+                address: incident.address,
+                description: incident.description,
+              }));
+              router.push(
+                `/(tabs)/responder/route-map?id=${incident.id}&dispatchId=${dispatchId}&incidentData=${incidentData}`
+              );
+            }}
           >
             <Ionicons name="navigate" size={24} color={Colors.textWhite} />
             <Text style={styles.actionButtonText}>Navigate</Text>
@@ -566,6 +600,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
 
 
 

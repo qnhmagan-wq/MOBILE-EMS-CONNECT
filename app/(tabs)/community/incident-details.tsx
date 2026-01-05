@@ -203,6 +203,20 @@ export default function IncidentDetailsScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Track Responders Button */}
+        {["dispatched", "in_progress"].includes(incident.status) && (
+          <TouchableOpacity
+            style={styles.trackingButton}
+            onPress={() => router.push(`/(tabs)/community/report?focus=${incident.id}`)}
+          >
+            <View style={styles.trackingButtonContent}>
+              <Ionicons name="navigate" size={20} color={Colors.responderPrimary} />
+              <Text style={styles.trackingButtonText}>Track Responders</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        )}
+
         {/* Timestamps */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -405,7 +419,29 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.primary,
   },
+  trackingButton: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.responderPrimary,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  trackingButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  trackingButtonText: {
+    fontSize: FontSizes.md,
+    fontWeight: "600",
+    color: Colors.responderPrimary,
+  },
 });
+
 
 
 

@@ -111,11 +111,19 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
       try {
         const response = await dispatchService.updateDispatchStatus(dispatchId, { status });
 
-        // Update local state
+        // Update local state while preserving incident data
         setDispatches((prev) =>
-          prev.map((dispatch) =>
-            dispatch.id === dispatchId ? response.dispatch : dispatch
-          )
+          prev.map((dispatch) => {
+            if (dispatch.id === dispatchId) {
+              // Merge response with existing dispatch to preserve incident
+              return {
+                ...dispatch,              // Keep existing data (including incident)
+                ...response.dispatch,     // Overwrite with updated fields (status, timestamps, etc.)
+                incident: response.dispatch.incident || dispatch.incident,  // Preserve incident if backend doesn't send it
+              };
+            }
+            return dispatch;
+          })
         );
 
         setError(null);

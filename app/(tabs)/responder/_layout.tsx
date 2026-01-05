@@ -37,16 +37,16 @@ export default function ResponderLayout() {
       <Tabs.Screen
         name="map"
         options={{
-          href: null, // Hidden from tab bar but still navigable
+          title: "Map",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="map-outline" size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="route-map"
         options={{
-          title: "Route Map",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="map-outline" size={size} color={color} />
-          ),
+          href: null, // Hidden from tab bar - only accessible via programmatic navigation with required params
         }}
       />
       <Tabs.Screen

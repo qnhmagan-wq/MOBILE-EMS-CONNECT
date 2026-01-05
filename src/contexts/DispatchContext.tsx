@@ -10,7 +10,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform, Linking } from 'react-native';
 import { DutyStatus, Dispatch, DispatchStatus } from '@/src/types/dispatch.types';
 import { useDispatchPolling } from '@/src/hooks/useDispatchPolling';
 import * as dispatchService from '@/src/services/dispatch.service';
@@ -31,6 +31,9 @@ export interface DispatchContextType {
   // Location Tracking
   isTrackingActive: boolean;
   hasLocationPermission: boolean;
+  // **FIX #4: Backend verification state**
+  locationLastSent: Date | null;
+  isBackendConfirmed: boolean;
 
   // Dispatches
   dispatches: Dispatch[];
@@ -56,6 +59,13 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // **FIX #4: Backend verification state**
+  const [locationLastSent, setLocationLastSent] = useState<Date | null>(null);
+  const [isBackendConfirmed, setIsBackendConfirmed] = useState(false);
+
+  // **FIX #2: Location interval ref for foreground updates**
+  const locationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   // Use dispatch polling hook
   const {
     dispatches,
@@ -69,6 +79,60 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     clearError: clearPollingError,
   } = useDispatchPolling();
 
+  /**
+   * **FIX #2 & #4: Send current location to backend with verification**
+   * Used for periodic foreground updates as fallback
+   */
+  const sendLocationUpdate = useCallback(async () => {
+    try {
+      const location = await locationService.getCurrentLocation();
+      if (location) {
+        const response = await dispatchService.updateLocation({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        });
+
+        console.log('[DispatchContext] Location update response:', response);
+
+        // **FIX #4: Confirm backend received the location**
+        if (response.message === 'Location updated successfully') {
+          setLocationLastSent(new Date());
+          setIsBackendConfirmed(true);
+        }
+      }
+    } catch (error) {
+      console.error('[DispatchContext] Foreground location update failed:', error);
+      setIsBackendConfirmed(false);
+    }
+  }, []);
+
+  /**
+   * **FIX #2: Start periodic foreground location updates**
+   * Sends location every 15 seconds as fallback if background task fails
+   */
+  const startPeriodicLocationUpdates = useCallback(() => {
+    console.log('[DispatchContext] Starting periodic foreground location updates');
+
+    // Clear any existing interval
+    if (locationIntervalRef.current) {
+      clearInterval(locationIntervalRef.current);
+    }
+
+    // Send updates every 15 seconds
+    locationIntervalRef.current = setInterval(sendLocationUpdate, LOCATION_UPDATE_INTERVAL);
+  }, [sendLocationUpdate]);
+
+  /**
+   * **FIX #2: Stop periodic foreground location updates**
+   */
+  const stopPeriodicLocationUpdates = useCallback(() => {
+    console.log('[DispatchContext] Stopping periodic foreground location updates');
+
+    if (locationIntervalRef.current) {
+      clearInterval(locationIntervalRef.current);
+      locationIntervalRef.current = null;
+    }
+  }, []);
 
   /**
    * Automatically start location tracking when permission is granted
@@ -88,6 +152,26 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!locationPerm.granted) {
         console.log('[DispatchContext] Location permission denied, cannot start tracking');
         setIsLoading(false);
+
+        // **FIX #3: Show user-facing error for permission denial**
+        Alert.alert(
+          'Location Permission Required',
+          'Background location access is required to track your location while on duty. Please enable location permissions in your device settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Open Settings',
+              onPress: () => {
+                if (Platform.OS === 'ios') {
+                  Linking.openURL('app-settings:');
+                } else {
+                  Linking.openSettings();
+                }
+              }
+            }
+          ]
+        );
+
         return;
       }
 
@@ -117,6 +201,30 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await startBackgroundLocationTracking();
       setIsTrackingActive(true);
 
+      // **FIX #1: Send immediate location update to backend**
+      // This ensures admin sees responder immediately instead of waiting 15 seconds for first background update
+      try {
+        console.log('[DispatchContext] Sending initial location update');
+        const currentLocation = await locationService.getCurrentLocation();
+
+        if (currentLocation) {
+          await dispatchService.updateLocation({
+            latitude: currentLocation.coords.latitude,
+            longitude: currentLocation.coords.longitude,
+          });
+          console.log('[DispatchContext] Initial location sent to backend:', {
+            lat: currentLocation.coords.latitude,
+            lng: currentLocation.coords.longitude,
+          });
+        }
+      } catch (error) {
+        console.error('[DispatchContext] Failed to send initial location:', error);
+        // Don't throw - continue with background tracking
+      }
+
+      // **FIX #2: Start foreground fallback updates**
+      startPeriodicLocationUpdates();
+
       // Start dispatch polling
       startPolling();
 
@@ -132,7 +240,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } finally {
       setIsLoading(false);
     }
-  }, [startPolling]);
+  }, [startPolling, startPeriodicLocationUpdates]);
 
   /**
    * Update dispatch status wrapper
@@ -181,8 +289,10 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Cleanup on unmount
     return () => {
       stopPolling();
+      // **FIX #2: Cleanup foreground location updates**
+      stopPeriodicLocationUpdates();
     };
-  }, [user, autoStartTracking, startPolling, stopPolling]);
+  }, [user, autoStartTracking, startPolling, stopPolling, stopPeriodicLocationUpdates]);
 
   /**
    * Sync error from polling hook
@@ -196,6 +306,8 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const value: DispatchContextType = {
     isTrackingActive,
     hasLocationPermission,
+    locationLastSent,
+    isBackendConfirmed,
     dispatches,
     activeDispatches,
     autoStartTracking,

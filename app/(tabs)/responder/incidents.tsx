@@ -10,7 +10,7 @@ import { Dispatch, DispatchStatus } from "@/src/types/dispatch.types";
 export default function ResponderIncidentsScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { activeDispatches, isOnDuty } = useDispatch();
+  const { activeDispatches, isTrackingActive } = useDispatch();
   const [status, setStatus] = React.useState<'Available' | 'Busy'>('Available');
 
   const getPriority = (type: string): 'HIGH' | 'MID' | 'LOW' => {
@@ -116,7 +116,7 @@ export default function ResponderIncidentsScreen() {
       </View>
 
       {/* Dispatches List */}
-      {!isOnDuty ? (
+      {!isTrackingActive ? (
         <View style={styles.emptyState}>
           <Ionicons name="moon-outline" size={64} color={Colors.textSecondary} />
           <Text style={styles.emptyTitle}>You are Off Duty</Text>
@@ -135,7 +135,7 @@ export default function ResponderIncidentsScreen() {
       ) : (
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.incidentsList}>
           {activeDispatches.map((dispatch) => {
-            const priority = getPriority(dispatch.incident.type);
+            const priority = dispatch.incident ? getPriority(dispatch.incident.type) : 'LOW';
             return (
               <TouchableOpacity
                 key={dispatch.id}
@@ -145,12 +145,14 @@ export default function ResponderIncidentsScreen() {
                 <View style={styles.cardHeader}>
                   <View style={styles.cardHeaderLeft}>
                     <Ionicons
-                      name={getIncidentIcon(dispatch.incident.type) as any}
+                      name={getIncidentIcon(dispatch.incident?.type || 'alert-circle') as any}
                       size={24}
                       color={Colors.textWhite}
                     />
                     <Text style={styles.incidentTitle}>
-                      {dispatch.incident.type.charAt(0).toUpperCase() + dispatch.incident.type.slice(1).replace('_', ' ')}
+                      {dispatch.incident
+                        ? dispatch.incident.type.charAt(0).toUpperCase() + dispatch.incident.type.slice(1).replace('_', ' ')
+                        : 'Unknown Incident'}
                     </Text>
                   </View>
                   <View style={styles.badgeContainer}>
@@ -165,7 +167,7 @@ export default function ResponderIncidentsScreen() {
                 <View style={styles.locationRow}>
                   <Ionicons name="location" size={16} color={Colors.textWhite} />
                   <Text style={styles.locationText} numberOfLines={1}>
-                    {dispatch.incident.address}
+                    {dispatch.incident?.address || 'Address unavailable'}
                   </Text>
                 </View>
                 {dispatch.distance_text && (

@@ -10,6 +10,8 @@ export default function ResponderHomeScreen() {
   const {
     isTrackingActive,
     hasLocationPermission,
+    locationLastSent,
+    isBackendConfirmed,
     isLoading,
     error,
     clearError,
@@ -58,6 +60,28 @@ export default function ResponderHomeScreen() {
               {isTrackingActive ? 'ACTIVE (Background)' : 'INACTIVE'}
             </Text>
           </View>
+
+          {/* **FIX #5: Backend connection status indicator** */}
+          {isTrackingActive && (
+            <View style={styles.backendStatusRow}>
+              <View style={[styles.backendStatusDot, {
+                backgroundColor: isBackendConfirmed ? '#10B981' : '#F59E0B'
+              }]} />
+              <View style={styles.backendStatusTextContainer}>
+                <Text style={[styles.backendStatusText, {
+                  color: isBackendConfirmed ? '#10B981' : '#F59E0B'
+                }]}>
+                  {isBackendConfirmed ? 'Backend Connected' : 'Connecting...'}
+                </Text>
+                {locationLastSent && isBackendConfirmed && (
+                  <Text style={styles.lastUpdateText}>
+                    Last update: {locationLastSent.toLocaleTimeString()}
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+
           {!hasLocationPermission && (
             <View style={styles.permissionWarning}>
               <Ionicons name="warning" size={16} color="#F59E0B" />
@@ -117,7 +141,9 @@ export default function ResponderHomeScreen() {
           <Ionicons name="information-circle" size={24} color={Colors.primary} />
           <Text style={styles.infoText}>
             {isTrackingActive
-              ? "Background location tracking is active. You will receive notifications for emergency assignments even when the app is closed."
+              ? isBackendConfirmed
+                ? `Location tracking active. Last update: ${locationLastSent ? locationLastSent.toLocaleTimeString() : 'sending...'}. You will receive notifications for emergency assignments.`
+                : "Location tracking starting... Waiting for backend confirmation. Please keep the app open for a moment."
               : "Grant location permission to enable automatic background tracking and receive emergency dispatch assignments."
             }
           </Text>
@@ -240,6 +266,33 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     fontWeight: "600",
     color: Colors.textPrimary,
+  },
+  // **FIX #5: Backend status indicator styles**
+  backendStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    padding: Spacing.sm,
+    backgroundColor: "#F9FAFB",
+    borderRadius: BorderRadius.sm,
+  },
+  backendStatusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  backendStatusTextContainer: {
+    flex: 1,
+  },
+  backendStatusText: {
+    fontSize: FontSizes.sm,
+    fontWeight: "600",
+  },
+  lastUpdateText: {
+    fontSize: FontSizes.xs,
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
   permissionWarning: {
     flexDirection: "row",

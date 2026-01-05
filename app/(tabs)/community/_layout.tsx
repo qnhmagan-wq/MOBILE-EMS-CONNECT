@@ -31,9 +31,9 @@ export default function CommunityLayout() {
       <Tabs.Screen
         name="report"
         options={{
-          title: "Location",
+          title: "Maps",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="location" size={size} color={color} />
+            <Ionicons name="map" size={size} color={color} />
           ),
         }}
       />
@@ -53,6 +53,12 @@ export default function CommunityLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="medical" size={size} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="first-aid-detail"
+        options={{
+          href: null, // Hide from tab bar
         }}
       />
       <Tabs.Screen

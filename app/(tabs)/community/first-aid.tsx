@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/src/config/theme";
 
@@ -11,13 +12,15 @@ interface FirstAidItem {
 }
 
 export default function FirstAidScreen() {
+  const router = useRouter();
+
   const firstAidItems: FirstAidItem[] = [
-    { id: "1", title: "CPR", icon: "heart-circle", color: "#FF3B30" },
-    { id: "2", title: "Choking", icon: "hand-left", color: "#FF9500" },
-    { id: "3", title: "Bleeding", icon: "water", color: "#DC143C" },
-    { id: "4", title: "Burns", icon: "flame", color: "#FF6347" },
-    { id: "5", title: "Fractures", icon: "body", color: "#8B4513" },
-    { id: "6", title: "Seizures", icon: "warning", color: "#FFB800" },
+    { id: 'cpr', title: 'CPR', icon: 'heart', color: '#EF4444' },
+    { id: 'choking', title: 'Choking', icon: 'hand-left', color: '#F59E0B' },
+    { id: 'bleeding', title: 'Bleeding', icon: 'water', color: '#DC2626' },
+    { id: 'burns', title: 'Burns', icon: 'flame', color: '#F97316' },
+    { id: 'fractures', title: 'Fractures', icon: 'body', color: '#92400E' },
+    { id: 'seizures', title: 'Seizures', icon: 'warning', color: '#EAB308' },
   ];
 
   return (
@@ -26,14 +29,19 @@ export default function FirstAidScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>First Aid Guide</Text>
         <Text style={styles.headerSubtitle}>
-          Quick reference for emergency situations
+          Tap any category for detailed step-by-step instructions
         </Text>
       </View>
 
       {/* First Aid Items Grid */}
       <ScrollView style={styles.content} contentContainerStyle={styles.gridContainer}>
         {firstAidItems.map((item) => (
-          <TouchableOpacity key={item.id} style={styles.card}>
+          <TouchableOpacity
+            key={item.id}
+            style={styles.card}
+            onPress={() => router.push(`/(tabs)/community/first-aid-detail?id=${item.id}`)}
+            activeOpacity={0.7}
+          >
             <View style={[styles.iconContainer, { backgroundColor: `${item.color}20` }]}>
               <Ionicons name={item.icon} size={40} color={item.color} />
             </View>
@@ -103,6 +111,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 });
+
 
 
 
