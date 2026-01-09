@@ -19,7 +19,7 @@
         "UIBackgroundModes": ["location", "fetch", "remote-notification"]
       },
       "config": {
-        "googleMapsApiKey": "AIzaSyC_OBg78CHbVJM3_k17wqfPQBlnh27bfa4"
+        "googleMapsApiKey": "AIzaSyBj6h2T76SNzaONbY8rTdzf9eaHrZkMrCs"
       }
     },
     "android": {
@@ -44,7 +44,7 @@
       ],
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyC_OBg78CHbVJM3_k17wqfPQBlnh27bfa4"
+          "apiKey": "AIzaSyBj6h2T76SNzaONbY8rTdzf9eaHrZkMrCs"
         }
       }
     },
@@ -62,7 +62,7 @@
       [
         "react-native-maps",
         {
-          "googleMapsApiKey": "AIzaSyC_OBg78CHbVJM3_k17wqfPQBlnh27bfa4"
+          "googleMapsApiKey": "AIzaSyBj6h2T76SNzaONbY8rTdzf9eaHrZkMrCs"
         }
       ],
       [

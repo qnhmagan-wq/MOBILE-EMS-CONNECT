@@ -7,7 +7,7 @@
 
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
-import { updateLocation } from './dispatch.service';
+import { updateLocation, updateDutyStatus } from './dispatch.service';
 
 const BACKGROUND_LOCATION_TASK = 'background-location-task';
 
@@ -38,10 +38,36 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
         });
-        console.log('[Background Location Task] Location updated successfully');
+        console.log('📍 [Background Location Task] Location updated successfully');
       } catch (error: any) {
-        console.error('[Background Location Task] Failed to update location:', error.message);
-        // Don't throw - let task continue even if API fails
+        const statusCode = error.response?.status;
+
+        if (statusCode === 422) {
+          console.error('❌ [Background Location Task] Location rejected - responder not on duty (422)');
+
+          // **FIX: Attempt to recover by setting duty status again**
+          try {
+            console.log('[Background Location Task] Attempting to recover - setting duty status...');
+            await updateDutyStatus({
+              is_on_duty: true,
+              responder_status: 'idle',
+            });
+            console.log('✅ [Background Location Task] Status recovered - retrying location update');
+
+            // Retry location update
+            await updateLocation({
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+            });
+            console.log('✅ [Background Location Task] Location update succeeded after recovery');
+          } catch (retryError: any) {
+            console.error('❌ [Background Location Task] Failed to recover:', retryError.response?.data || retryError.message);
+            // Don't throw - let task continue
+          }
+        } else {
+          console.error('[Background Location Task] Failed to update location:', error.response?.data || error.message);
+          // Don't throw - let task continue even if API fails
+        }
       }
     }
   }
