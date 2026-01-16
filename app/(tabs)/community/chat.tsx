@@ -64,7 +64,7 @@ export default function ChatScreen() {
     return () => {
       stopPolling();
     };
-  }, [incidentId, isFocused]);
+  }, [incidentId, isFocused, startPolling, stopPolling]);
 
   // Pull-to-refresh handler
   const onRefresh = async () => {
@@ -97,7 +97,7 @@ export default function ChatScreen() {
     if (unreadMessageIds.length > 0) {
       markMessagesAsRead(unreadMessageIds);
     }
-  }, [viewableMessageIds, messages, user]);
+  }, [viewableMessageIds, messages, user, markMessagesAsRead]);
 
   const handleViewableItemsChanged = useRef(({ viewableItems }: any) => {
     const ids = new Set(viewableItems.map((item: any) => item.item.id));

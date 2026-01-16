@@ -10,7 +10,7 @@ import { Dispatch, DispatchStatus } from '@/src/types/dispatch.types';
 import * as dispatchService from '@/src/services/dispatch.service';
 import * as notificationService from '@/src/services/notification.service';
 
-const POLL_INTERVAL = 2000; // 5 seconds
+const POLL_INTERVAL = 10000; // 10 seconds (was 5 seconds - reduced further to prevent UI stuttering)
 
 export interface UseDispatchPollingReturn {
   dispatches: Dispatch[];

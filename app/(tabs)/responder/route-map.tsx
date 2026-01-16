@@ -13,7 +13,7 @@
  * - Distance and ETA display (placeholder for Google Directions API)
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -33,6 +33,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PreArrivalModal } from "@/src/components/PreArrivalModal";
+import { PreArrivalData } from "@/src/types/dispatch.types";
 import * as mapsService from '@/src/services/maps.service';
 
 export default function RouteMapScreen() {
@@ -40,7 +41,7 @@ export default function RouteMapScreen() {
   const params = useLocalSearchParams();
   const incidentId = params.id ? parseInt(params.id as string) : null;
   const dispatchId = params.dispatchId ? parseInt(params.dispatchId as string) : null;
-  const autoStart = params.autoStart === 'true';
+  // Note: autoStart param removed - status updates now handled in incident-details.tsx
 
   // Parse incident data from params (primary source)
   let incidentFromParams = null;
@@ -66,6 +67,10 @@ export default function RouteMapScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [showPreArrivalModal, setShowPreArrivalModal] = useState(false);
+  const [preArrivalData, setPreArrivalData] = useState<PreArrivalData | null>(null);
+
+  // Ref to track modal state for interval callback (avoids stale closure issues)
+  const isModalOpenRef = useRef(false);
 
   // Route data from Google Directions API
   const [route, setRoute] = useState<mapsService.RouteResponse | null>(null);
@@ -103,8 +108,23 @@ export default function RouteMapScreen() {
     }
   }, []);
 
+  // Track route update counter for less frequent route API calls
+  const routeUpdateCounter = React.useRef(0);
+  const ROUTE_UPDATE_FREQUENCY = 3; // Update route every 3rd location update (15 seconds with 5s interval)
+
+  // Track last location where route was updated (for distance-based updates)
+  const lastRouteLocation = React.useRef<{ lat: number; lng: number } | null>(null);
+  const ROUTE_UPDATE_DISTANCE_THRESHOLD = 100; // Only update route if moved >100 meters
+
+  // Keep modal ref in sync with state (so interval callback always has current value)
+  useEffect(() => {
+    isModalOpenRef.current = showPreArrivalModal;
+    console.log('[Route Map] Modal state changed:', showPreArrivalModal ? 'OPEN - pausing location updates' : 'CLOSED - resuming location updates');
+  }, [showPreArrivalModal]);
+
   /**
    * Update responder location every 5 seconds
+   * Route API is called less frequently to reduce stuttering
    */
   useEffect(() => {
     if (!incidentId || !dispatchId) {
@@ -135,81 +155,104 @@ export default function RouteMapScreen() {
     // Request permission and get initial location
     requestLocationPermission();
 
+    // Function to update route (called less frequently)
+    const updateRoute = async (location: Location.LocationObject) => {
+      try {
+        const routeData = await mapsService.getRoute(
+          {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          },
+          {
+            latitude: incident.latitude,
+            longitude: incident.longitude,
+          }
+        );
+
+        setRoute(routeData);
+        setDistance(routeData.distance.text);
+        setEta(routeData.duration.text);
+
+        console.log('[Route Map] Route updated:', {
+          distance: routeData.distance.text,
+          eta: routeData.duration.text,
+        });
+      } catch (err: any) {
+        console.error('[Route Map] Failed to get route:', err);
+        // Fallback to straight-line distance on error
+        const distanceMeters = calculateDistance(
+          location.coords.latitude,
+          location.coords.longitude,
+          incident.latitude,
+          incident.longitude
+        );
+        const distanceKm = (distanceMeters / 1000).toFixed(2);
+        setDistance(`${distanceKm} km (approx)`);
+        const etaMinutes = Math.ceil((distanceMeters / 1000) / 40 * 60);
+        setEta(`${etaMinutes} min (approx)`);
+      }
+    };
+
     // Set up interval to update location every 5 seconds
     const interval = setInterval(async () => {
+      // Skip location updates while pre-arrival modal is open to prevent keyboard dismissal
+      // Using ref instead of state to avoid stale closure issues
+      if (isModalOpenRef.current) {
+        console.log('[Route Map] Skipping location update - modal is open');
+        return;
+      }
+
       try {
         const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
+          accuracy: Location.Accuracy.Balanced, // Use balanced accuracy to reduce battery/CPU usage
         });
         setResponderLocation(location);
-        console.log('[Route Map] Location updated:', location.coords);
 
-        // **PHASE 4: Google Directions API Integration**
-        if (incident) {
-          try {
-            const routeData = await mapsService.getRoute(
-              {
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-              },
-              {
-                latitude: incident.latitude,
-                longitude: incident.longitude,
-              }
-            );
+        // Update route less frequently AND only if moved significantly
+        routeUpdateCounter.current++;
+        if (routeUpdateCounter.current >= ROUTE_UPDATE_FREQUENCY) {
+          routeUpdateCounter.current = 0;
 
-            setRoute(routeData);
-            setDistance(routeData.distance.text);
-            setEta(routeData.duration.text);
-
-            console.log('[Route Map] Route updated:', {
-              distance: routeData.distance.text,
-              eta: routeData.duration.text,
-            });
-          } catch (err: any) {
-            console.error('[Route Map] Failed to get route:', err);
-            // Fallback to straight-line distance on error
-            const distanceMeters = calculateDistance(
+          // Check if we've moved enough to warrant a route update
+          const shouldUpdateRoute = !lastRouteLocation.current ||
+            calculateDistance(
               location.coords.latitude,
               location.coords.longitude,
-              incident.latitude,
-              incident.longitude
-            );
-            const distanceKm = (distanceMeters / 1000).toFixed(2);
-            setDistance(`${distanceKm} km (approx)`);
-            const etaMinutes = Math.ceil((distanceMeters / 1000) / 40 * 60);
-            setEta(`${etaMinutes} min (approx)`);
+              lastRouteLocation.current.lat,
+              lastRouteLocation.current.lng
+            ) > ROUTE_UPDATE_DISTANCE_THRESHOLD;
+
+          if (shouldUpdateRoute) {
+            lastRouteLocation.current = {
+              lat: location.coords.latitude,
+              lng: location.coords.longitude,
+            };
+            updateRoute(location);
+          } else {
+            console.log('[Route Map] Skipping route update - minimal movement');
           }
         }
       } catch (err: any) {
         console.error('[Route Map] Location update error:', err);
       }
-    }, 5000); // Update every 5 seconds
+    }, 5000); // Update location every 5 seconds
+
+    // Get initial route immediately and set initial lastRouteLocation
+    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+      .then((location) => {
+        lastRouteLocation.current = {
+          lat: location.coords.latitude,
+          lng: location.coords.longitude,
+        };
+        updateRoute(location);
+      })
+      .catch(console.error);
 
     return () => clearInterval(interval);
   }, [incidentId, dispatchId, incident, requestLocationPermission]);
 
-  /**
-   * Auto-update dispatch status to "en_route" when screen loads with autoStart=true
-   */
-  useEffect(() => {
-    if (autoStart && dispatch?.status === 'accepted' && !isUpdatingStatus) {
-      console.log('[Route Map] Auto-updating status to en_route');
-      setIsUpdatingStatus(true);
-
-      updateDispatchStatus(dispatchId!, 'en_route')
-        .then(() => {
-          console.log('[Route Map] Status updated to en_route successfully');
-        })
-        .catch((err) => {
-          console.error('[Route Map] Failed to update status:', err);
-          Alert.alert('Warning', 'Failed to update dispatch status to En Route');
-        })
-        .finally(() => {
-          setIsUpdatingStatus(false);
-        });
-    }
-  }, [autoStart, dispatch?.status, dispatchId, updateDispatchStatus, isUpdatingStatus]);
+  // Note: Auto-update to en_route is now handled in incident-details.tsx
+  // before navigation to avoid race conditions with backend status validation
 
   /**
    * Handle "I've Arrived" button press
@@ -297,6 +340,13 @@ export default function RouteMapScreen() {
     return R * c; // Distance in meters
   };
 
+  // Memoize polyline coordinates to prevent unnecessary re-renders
+  // This prevents creating a new array reference on every render
+  const memoizedRouteCoordinates = useMemo(
+    () => route?.coordinates || [],
+    [route?.coordinates]
+  );
+
   // Show loading state
   if (isLoadingLocation) {
     return (
@@ -333,7 +383,7 @@ export default function RouteMapScreen() {
         <MapView
           provider={PROVIDER_GOOGLE}
           style={styles.map}
-          region={{
+          initialRegion={{
             latitude: responderLocation.coords.latitude,
             longitude: responderLocation.coords.longitude,
             latitudeDelta: 0.05,
@@ -357,10 +407,10 @@ export default function RouteMapScreen() {
             </View>
           </Marker>
 
-          {/* Route Polyline - Google Directions API */}
-          {route && route.coordinates && route.coordinates.length > 0 && (
+          {/* Route Polyline - Google Directions API (memoized to prevent re-renders) */}
+          {memoizedRouteCoordinates.length > 0 && (
             <Polyline
-              coordinates={route.coordinates}
+              coordinates={memoizedRouteCoordinates}
               strokeColor={Colors.responderPrimary}
               strokeWidth={4}
               lineDashPattern={[1]}
@@ -420,11 +470,20 @@ export default function RouteMapScreen() {
 
             {/* Optional Pre-Arrival Patient Info Button */}
             <TouchableOpacity
-              style={styles.preArrivalButton}
+              style={[styles.preArrivalButton, preArrivalData && styles.preArrivalButtonSubmitted]}
               onPress={() => setShowPreArrivalModal(true)}
             >
-              <Ionicons name="document-text" size={20} color={Colors.primary} />
-              <Text style={styles.preArrivalButtonText}>Add Patient Info (Optional)</Text>
+              <Ionicons
+                name={preArrivalData ? "checkmark-document" : "document-text"}
+                size={20}
+                color={preArrivalData ? Colors.success : Colors.primary}
+              />
+              <Text style={[
+                styles.preArrivalButtonText,
+                preArrivalData && styles.preArrivalButtonTextSubmitted
+              ]}>
+                {preArrivalData ? 'Update Patient Info' : 'Add Patient Info (Optional)'}
+              </Text>
             </TouchableOpacity>
 
             {/* Get Directions in Google Maps */}
@@ -462,9 +521,9 @@ export default function RouteMapScreen() {
             dispatchId={dispatchId}
             incidentType={incident?.type}
             callerNameDefault={incidentFromContext?.reporter?.name}
+            existingData={preArrivalData}
             onSuccess={() => {
-              setShowPreArrivalModal(false);
-              Alert.alert('Success', 'Patient information saved successfully');
+              console.log('[Route Map] Pre-arrival info submitted successfully');
             }}
           />
         )}
@@ -667,6 +726,13 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontSize: FontSizes.md,
     fontWeight: '600',
+  },
+  preArrivalButtonSubmitted: {
+    borderColor: Colors.success,
+    backgroundColor: 'rgba(52, 199, 89, 0.1)',
+  },
+  preArrivalButtonTextSubmitted: {
+    color: Colors.success,
   },
   externalNavButton: {
     backgroundColor: Colors.surface,

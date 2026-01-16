@@ -166,15 +166,20 @@ export interface PreArrivalRequest {
  */
 export interface PreArrivalResponse {
   message: string;
-  pre_arrival?: {
-    id: number;
-    dispatch_id: number;
-    patient_name: string;
-    sex: string;
-    age: number;
-    incident_type: string;
-    caller_name?: string;
-    estimated_arrival?: string;
-    created_at: string;
-  };
+  pre_arrival?: PreArrivalData;
+}
+
+/**
+ * Pre-arrival data structure (for form state and API responses)
+ */
+export interface PreArrivalData {
+  id: number;
+  dispatch_id: number;
+  patient_name: string;
+  sex: 'Male' | 'Female' | 'Other';
+  age: number;
+  incident_type: string;
+  caller_name?: string | null;
+  estimated_arrival?: string | null;
+  submitted_at: string;
 }

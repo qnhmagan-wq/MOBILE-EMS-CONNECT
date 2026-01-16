@@ -16,7 +16,7 @@ import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { Incident } from "@/src/types/incident.types";
-import { Dispatch, DispatchStatus } from "@/src/types/dispatch.types";
+import { Dispatch, DispatchStatus, PreArrivalData } from "@/src/types/dispatch.types";
 import { DispatchStatusBadge } from "@/components/DispatchStatusBadge";
 import TimelineItem from "@/components/TimelineItem";
 import { getElapsedTime } from "@/src/utils/time";
@@ -36,7 +36,11 @@ export default function ResponderIncidentDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showPreArrivalModal, setShowPreArrivalModal] = useState(false);
+  const [preArrivalData, setPreArrivalData] = useState<PreArrivalData | null>(null);
   const isMounted = useRef(true); // Track if component is mounted
+
+  // Helper to check if pre-arrival form should be available
+  const canShowPreArrival = dispatch?.status === 'en_route' || dispatch?.status === 'arrived';
 
   useEffect(() => {
     // Get incident data from dispatch context (no API call needed)
@@ -113,9 +117,29 @@ export default function ResponderIncidentDetailsScreen() {
             try {
               await updateStatus(dispatch.id, newStatus);
 
-              // **FIX #2: Auto-navigate to route-map after accepting**
+              // **FIX: Sequential status updates - Accept then En Route before navigation**
+              // Backend requires: assigned → accepted → en_route (must be sequential)
               if (newStatus === 'accepted') {
-                console.log('[Incident Details] Navigating to route-map for pre-arrival');
+                console.log('[Incident Details] Status updated to accepted, waiting for backend to commit...');
+
+                // Add 500ms delay to ensure backend commits the accepted status
+                // This prevents race condition where en_route is sent before accepted is committed
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                try {
+                  // Update to en_route AFTER delay to avoid race condition
+                  await updateStatus(dispatch.id, 'en_route');
+                  console.log('[Incident Details] Status updated to en_route successfully');
+                } catch (enRouteError: any) {
+                  console.error('[Incident Details] Failed to update to en_route:', enRouteError);
+                  // Still navigate but without autoStart - let user manually trigger en_route
+                  Alert.alert(
+                    'Partial Success',
+                    'Dispatch accepted but failed to set en_route status. You can update it manually on the map screen.'
+                  );
+                }
+
+                // Navigate to route-map (without autoStart since we already updated)
                 if (isMounted.current && incident) {
                   // Serialize incident data for safe URL transmission
                   const incidentData = encodeURIComponent(JSON.stringify({
@@ -127,7 +151,7 @@ export default function ResponderIncidentDetailsScreen() {
                     description: incident.description,
                   }));
                   router.push(
-                    `/(tabs)/responder/route-map?id=${incident.id}&dispatchId=${dispatch.id}&autoStart=true&incidentData=${incidentData}`
+                    `/(tabs)/responder/route-map?id=${incident.id}&dispatchId=${dispatch.id}&incidentData=${incidentData}`
                   );
                 }
               }
@@ -357,13 +381,22 @@ export default function ResponderIncidentDetailsScreen() {
 
         {/* Other Action Buttons */}
         <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => setShowPreArrivalModal(true)}
-          >
-            <Ionicons name="document-text" size={24} color={Colors.textWhite} />
-            <Text style={styles.actionButtonText}>Pre-Arrival Info (Optional)</Text>
-          </TouchableOpacity>
+          {/* Pre-Arrival Button - only show when en_route or arrived */}
+          {canShowPreArrival && (
+            <TouchableOpacity
+              style={[styles.actionButton, preArrivalData && styles.preArrivalSubmittedButton]}
+              onPress={() => setShowPreArrivalModal(true)}
+            >
+              <Ionicons
+                name={preArrivalData ? "checkmark-document" : "document-text"}
+                size={24}
+                color={Colors.textWhite}
+              />
+              <Text style={styles.actionButtonText}>
+                {preArrivalData ? 'Update Pre-Arrival Info' : 'Pre-Arrival Info (Optional)'}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={[styles.actionButton, styles.navigateButton]}
@@ -399,8 +432,11 @@ export default function ResponderIncidentDetailsScreen() {
           dispatchId={dispatch.id}
           incidentType={incident?.type}
           callerNameDefault={dispatch.incident?.reporter?.name}
+          existingData={preArrivalData}
           onSuccess={() => {
             console.log('[IncidentDetails] Pre-arrival info submitted successfully');
+            // Note: In a real implementation, we would fetch the updated pre-arrival data
+            // from the API response. For now, we just log the success.
           }}
         />
       )}
@@ -593,6 +629,9 @@ const styles = StyleSheet.create({
   },
   navigateButton: {
     backgroundColor: "#10B981",
+  },
+  preArrivalSubmittedButton: {
+    backgroundColor: Colors.success,
   },
   actionButtonText: {
     color: Colors.textWhite,
