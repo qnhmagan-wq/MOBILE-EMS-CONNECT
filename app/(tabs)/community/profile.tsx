@@ -10,8 +10,7 @@ export default function CommunityProfileScreen() {
   const router = useRouter();
 
   const handleEditProfile = () => {
-    // Navigate to edit profile screen
-    Alert.alert("Edit Profile", "Opening edit profile screen...");
+    router.push('/(tabs)/community/edit-profile');
   };
 
   const handleUserSettings = () => {
@@ -55,28 +54,42 @@ export default function CommunityProfileScreen() {
           <View style={styles.avatar}>
             <Ionicons name="person" size={60} color={Colors.primary} />
           </View>
-          <Text style={styles.name}>{user?.name || "Navin Magan"}</Text>
-          <Text style={styles.email}>{user?.email || "navinmagan@gmail.com"}</Text>
-          <Text style={styles.phone}>09199053556</Text>
+          <Text style={styles.name}>{user?.name || "User"}</Text>
+          <Text style={styles.email}>{user?.email || ""}</Text>
+          {user?.phone_number && <Text style={styles.phone}>{user.phone_number}</Text>}
 
           {/* Medical Info */}
           <View style={styles.medicalInfo}>
-            <View style={styles.infoItem}>
-              <Ionicons name="water" size={18} color={Colors.textSecondary} />
-              <Text style={styles.infoText}>Blood Type: O+</Text>
-            </View>
-            <View style={styles.infoItem}>
-              <Ionicons name="warning" size={18} color={Colors.textSecondary} />
-              <Text style={styles.infoText}>Allergies: Penicillin, Peanuts</Text>
-            </View>
-            <View style={styles.infoItem}>
-              <Ionicons name="fitness" size={18} color={Colors.textSecondary} />
-              <Text style={styles.infoText}>Existing Conditions: Asthma, Hypertension</Text>
-            </View>
-            <View style={styles.infoItem}>
-              <Ionicons name="medkit" size={18} color={Colors.textSecondary} />
-              <Text style={styles.infoText}>Medications: Salbutamol Inhaler, Loraplne 5mg</Text>
-            </View>
+            {user?.blood_type && (
+              <View style={styles.infoItem}>
+                <Ionicons name="water" size={18} color={Colors.textSecondary} />
+                <Text style={styles.infoText}>Blood Type: {user.blood_type}</Text>
+              </View>
+            )}
+            {user?.allergies && (
+              <View style={styles.infoItem}>
+                <Ionicons name="warning" size={18} color={Colors.textSecondary} />
+                <Text style={styles.infoText}>Allergies: {user.allergies}</Text>
+              </View>
+            )}
+            {user?.existing_conditions && (
+              <View style={styles.infoItem}>
+                <Ionicons name="fitness" size={18} color={Colors.textSecondary} />
+                <Text style={styles.infoText}>Existing Conditions: {user.existing_conditions}</Text>
+              </View>
+            )}
+            {user?.medications && (
+              <View style={styles.infoItem}>
+                <Ionicons name="medkit" size={18} color={Colors.textSecondary} />
+                <Text style={styles.infoText}>Medications: {user.medications}</Text>
+              </View>
+            )}
+            {!user?.blood_type && !user?.allergies && !user?.existing_conditions && !user?.medications && (
+              <View style={styles.infoItem}>
+                <Ionicons name="information-circle" size={18} color={Colors.textSecondary} />
+                <Text style={styles.infoText}>Tap Edit Profile to add your medical information</Text>
+              </View>
+            )}
           </View>
         </View>
 

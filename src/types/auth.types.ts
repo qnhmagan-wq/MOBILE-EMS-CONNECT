@@ -4,8 +4,18 @@ export interface User {
   id: number;
   email: string;
   name: string;
+  first_name?: string;
+  last_name?: string;
   phone_number?: string;
   role: UserRole;
+  // Responder-specific fields
+  badge_number?: string;
+  hospital_assigned?: string;
+  // Community/medical fields
+  blood_type?: string;
+  allergies?: string;
+  existing_conditions?: string;
+  medications?: string;
 }
 
 export interface AuthState {

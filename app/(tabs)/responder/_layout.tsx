@@ -64,6 +64,12 @@ export default function ResponderLayout() {
           href: null, // Prevents Expo Router auto-registration conflict
         }}
       />
+      <Tabs.Screen
+        name="edit-profile"
+        options={{
+          href: null, // Hide from tab bar - accessed from Profile screen
+        }}
+      />
     </Tabs>
   );
 }

@@ -3,9 +3,6 @@ import { User } from '@/src/types/auth.types';
 import { saveUser } from './storage.service';
 
 export interface UserProfile extends User {
-  phone_number?: string;
-  first_name?: string;
-  last_name?: string;
   username?: string;
   email_verified_at?: string;
   created_at?: string;
@@ -16,6 +13,14 @@ export interface UpdateProfileRequest {
   first_name?: string;
   last_name?: string;
   phone_number?: string;
+  // Responder fields
+  badge_number?: string;
+  hospital_assigned?: string;
+  // Medical info (community users)
+  blood_type?: string;
+  allergies?: string;
+  existing_conditions?: string;
+  medications?: string;
 }
 
 export interface UpdateProfileResponse {

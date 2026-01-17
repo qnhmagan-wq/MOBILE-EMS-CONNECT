@@ -13,7 +13,7 @@
  * - Distance and ETA display (placeholder for Google Directions API)
  */
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -32,8 +32,6 @@ import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { PreArrivalModal } from "@/src/components/PreArrivalModal";
-import { PreArrivalData } from "@/src/types/dispatch.types";
 import * as mapsService from '@/src/services/maps.service';
 
 export default function RouteMapScreen() {
@@ -66,11 +64,6 @@ export default function RouteMapScreen() {
   const [isLoadingLocation, setIsLoadingLocation] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-  const [showPreArrivalModal, setShowPreArrivalModal] = useState(false);
-  const [preArrivalData, setPreArrivalData] = useState<PreArrivalData | null>(null);
-
-  // Ref to track modal state for interval callback (avoids stale closure issues)
-  const isModalOpenRef = useRef(false);
 
   // Route data from Google Directions API
   const [route, setRoute] = useState<mapsService.RouteResponse | null>(null);
@@ -115,12 +108,6 @@ export default function RouteMapScreen() {
   // Track last location where route was updated (for distance-based updates)
   const lastRouteLocation = React.useRef<{ lat: number; lng: number } | null>(null);
   const ROUTE_UPDATE_DISTANCE_THRESHOLD = 100; // Only update route if moved >100 meters
-
-  // Keep modal ref in sync with state (so interval callback always has current value)
-  useEffect(() => {
-    isModalOpenRef.current = showPreArrivalModal;
-    console.log('[Route Map] Modal state changed:', showPreArrivalModal ? 'OPEN - pausing location updates' : 'CLOSED - resuming location updates');
-  }, [showPreArrivalModal]);
 
   /**
    * Update responder location every 5 seconds
@@ -195,13 +182,6 @@ export default function RouteMapScreen() {
 
     // Set up interval to update location every 5 seconds
     const interval = setInterval(async () => {
-      // Skip location updates while pre-arrival modal is open to prevent keyboard dismissal
-      // Using ref instead of state to avoid stale closure issues
-      if (isModalOpenRef.current) {
-        console.log('[Route Map] Skipping location update - modal is open');
-        return;
-      }
-
       try {
         const location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced, // Use balanced accuracy to reduce battery/CPU usage
@@ -468,24 +448,6 @@ export default function RouteMapScreen() {
               </View>
             )}
 
-            {/* Optional Pre-Arrival Patient Info Button */}
-            <TouchableOpacity
-              style={[styles.preArrivalButton, preArrivalData && styles.preArrivalButtonSubmitted]}
-              onPress={() => setShowPreArrivalModal(true)}
-            >
-              <Ionicons
-                name={preArrivalData ? "checkmark-document" : "document-text"}
-                size={20}
-                color={preArrivalData ? Colors.success : Colors.primary}
-              />
-              <Text style={[
-                styles.preArrivalButtonText,
-                preArrivalData && styles.preArrivalButtonTextSubmitted
-              ]}>
-                {preArrivalData ? 'Update Patient Info' : 'Add Patient Info (Optional)'}
-              </Text>
-            </TouchableOpacity>
-
             {/* Get Directions in Google Maps */}
             <TouchableOpacity
               style={styles.externalNavButton}
@@ -506,27 +468,12 @@ export default function RouteMapScreen() {
               ) : (
                 <>
                   <Ionicons name="checkmark-circle" size={24} color="#fff" />
-                  <Text style={styles.arrivedButtonText}>I've Arrived</Text>
+                  <Text style={styles.arrivedButtonText}>I&apos;ve Arrived</Text>
                 </>
               )}
             </TouchableOpacity>
           </ScrollView>
         </View>
-
-        {/* Pre-Arrival Modal */}
-        {dispatchId && (
-          <PreArrivalModal
-            visible={showPreArrivalModal}
-            onClose={() => setShowPreArrivalModal(false)}
-            dispatchId={dispatchId}
-            incidentType={incident?.type}
-            callerNameDefault={incidentFromContext?.reporter?.name}
-            existingData={preArrivalData}
-            onSuccess={() => {
-              console.log('[Route Map] Pre-arrival info submitted successfully');
-            }}
-          />
-        )}
 
         {/* Back Button */}
         <TouchableOpacity style={styles.backIconButton} onPress={() => router.back()}>
@@ -709,30 +656,6 @@ const styles = StyleSheet.create({
     color: Colors.textWhite,
     fontSize: FontSizes.md,
     fontWeight: '600',
-  },
-  preArrivalButton: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  preArrivalButtonText: {
-    color: Colors.primary,
-    fontSize: FontSizes.md,
-    fontWeight: '600',
-  },
-  preArrivalButtonSubmitted: {
-    borderColor: Colors.success,
-    backgroundColor: 'rgba(52, 199, 89, 0.1)',
-  },
-  preArrivalButtonTextSubmitted: {
-    color: Colors.success,
   },
   externalNavButton: {
     backgroundColor: Colors.surface,

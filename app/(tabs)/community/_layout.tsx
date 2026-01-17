@@ -106,6 +106,12 @@ export default function CommunityLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="edit-profile"
+        options={{
+          href: null, // Hide from tab bar - accessed from Profile screen
+        }}
+      />
     </Tabs>
   );
 }

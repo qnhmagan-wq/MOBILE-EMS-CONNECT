@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, SafeAreaView, Image } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, SafeAreaView } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
@@ -68,14 +68,20 @@ export default function ResponderProfileScreen() {
           </View>
           
           <View style={styles.userInfoBanner}>
-            <Text style={styles.roleText}>ADMIN</Text>
+            <Text style={styles.roleText}>{user?.role?.toUpperCase() || 'RESPONDER'}</Text>
             <Text style={styles.name}>{user?.name || 'Responder'}</Text>
+            {user?.badge_number && (
+              <Text style={styles.badgeText}>Badge: {user.badge_number}</Text>
+            )}
+            {user?.hospital_assigned && (
+              <Text style={styles.hospitalText}>{user.hospital_assigned}</Text>
+            )}
           </View>
         </View>
 
         {/* Menu Section - White */}
         <View style={styles.menuSection}>
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(tabs)/responder/edit-profile')}>
             <View style={styles.menuIconContainer}>
               <Ionicons name="person-add" size={20} color={Colors.textPrimary} />
             </View>
@@ -189,6 +195,16 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.lg,
     fontWeight: "bold",
     color: Colors.textPrimary,
+  },
+  badgeText: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
+  },
+  hospitalText: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
   menuSection: {
     backgroundColor: Colors.textWhite,
