@@ -12,6 +12,12 @@ import { useRouter } from 'expo-router';
 import { useIncomingCall } from '@/src/contexts/IncomingCallContext';
 import { useAgoraCall } from '@/src/hooks/useAgoraCall';
 import { Colors, Spacing, FontSizes } from '@/src/config/theme';
+import {
+  scale,
+  scaleFontSize,
+  scaleSpacing,
+  getResponsiveButtonSize,
+} from '@/src/utils/responsive';
 
 export default function IncomingCallScreen() {
   const router = useRouter();
@@ -96,7 +102,7 @@ export default function IncomingCallScreen() {
       {/* Admin caller info */}
       <View style={styles.callerInfo}>
         <View style={styles.avatarContainer}>
-          <Ionicons name="person-circle" size={120} color="rgba(255, 255, 255, 0.9)" />
+          <Ionicons name="person-circle" size={scale(120)} color="rgba(255, 255, 255, 0.9)" />
         </View>
         <Text style={styles.callerName}>{incomingCall.admin_caller.name}</Text>
         <Text style={styles.callerRole}>Emergency Services</Text>
@@ -118,7 +124,7 @@ export default function IncomingCallScreen() {
           onPress={handleAnswer}
           activeOpacity={0.8}
         >
-          <Ionicons name="call" size={32} color="#FFFFFF" />
+          <Ionicons name="call" size={scale(32)} color="#FFFFFF" />
           <Text style={styles.buttonText}>Answer</Text>
         </TouchableOpacity>
 
@@ -127,7 +133,7 @@ export default function IncomingCallScreen() {
           onPress={handleReject}
           activeOpacity={0.8}
         >
-          <Ionicons name="close-circle" size={32} color="#FFFFFF" />
+          <Ionicons name="close-circle" size={scale(32)} color="#FFFFFF" />
           <Text style={styles.buttonText}>Reject</Text>
         </TouchableOpacity>
       </View>
@@ -135,19 +141,22 @@ export default function IncomingCallScreen() {
   );
 }
 
+const pulseOuterSize = scale(300);
+const actionButtonSize = getResponsiveButtonSize(120);
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.primary,
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: Spacing.xl,
+    padding: scaleSpacing(Spacing.xl),
   },
   pulseOuter: {
     position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
+    width: pulseOuterSize,
+    height: pulseOuterSize,
+    borderRadius: pulseOuterSize / 2,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     top: '20%',
   },
@@ -156,50 +165,50 @@ const styles = StyleSheet.create({
     marginTop: '25%',
   },
   avatarContainer: {
-    marginBottom: Spacing.lg,
+    marginBottom: scaleSpacing(Spacing.lg),
   },
   callerName: {
-    fontSize: FontSizes.xxxl,
+    fontSize: scaleFontSize(FontSizes.xxxl),
     fontWeight: '700',
     color: '#FFFFFF',
-    marginTop: Spacing.md,
+    marginTop: scaleSpacing(Spacing.md),
     textAlign: 'center',
   },
   callerRole: {
-    fontSize: FontSizes.md,
+    fontSize: scaleFontSize(FontSizes.md),
     color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: Spacing.xs,
+    marginTop: scaleSpacing(Spacing.xs),
   },
   contextInfo: {
     alignItems: 'center',
-    marginBottom: Spacing.xl,
+    marginBottom: scaleSpacing(Spacing.xl),
   },
   contextLabel: {
-    fontSize: FontSizes.sm,
+    fontSize: scaleFontSize(FontSizes.sm),
     color: 'rgba(255, 255, 255, 0.7)',
-    marginBottom: Spacing.xs,
+    marginBottom: scaleSpacing(Spacing.xs),
   },
   incidentType: {
-    fontSize: FontSizes.xl,
+    fontSize: scaleFontSize(FontSizes.xl),
     fontWeight: '600',
     color: '#FFFFFF',
-    marginTop: Spacing.xs,
+    marginTop: scaleSpacing(Spacing.xs),
     textAlign: 'center',
   },
   incidentId: {
-    fontSize: FontSizes.md,
+    fontSize: scaleFontSize(FontSizes.md),
     color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: Spacing.xs,
+    marginTop: scaleSpacing(Spacing.xs),
   },
   actions: {
     flexDirection: 'row',
-    gap: Spacing.xl,
-    marginBottom: Spacing.xxl,
+    gap: scaleSpacing(Spacing.xl),
+    marginBottom: scaleSpacing(Spacing.xxl),
   },
   actionButton: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: actionButtonSize,
+    height: actionButtonSize,
+    borderRadius: actionButtonSize / 2,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -216,9 +225,9 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: FontSizes.md,
+    fontSize: scaleFontSize(FontSizes.md),
     fontWeight: '600',
-    marginTop: Spacing.xs,
+    marginTop: scaleSpacing(Spacing.xs),
   },
   loadingContainer: {
     flex: 1,
@@ -226,8 +235,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: FontSizes.md,
+    fontSize: scaleFontSize(FontSizes.md),
     color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: Spacing.md,
+    marginTop: scaleSpacing(Spacing.md),
   },
 });

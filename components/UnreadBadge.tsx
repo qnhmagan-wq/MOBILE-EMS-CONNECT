@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Colors, FontSizes } from '@/src/config/theme';
 import * as messageService from '@/src/services/message.service';
+import { scale, scaleFontSize, scaleSpacing } from '@/src/utils/responsive';
 
 interface UnreadBadgeProps {
   incidentId: number;
@@ -44,26 +45,26 @@ export default function UnreadBadge({ incidentId, size = 'medium' }: UnreadBadge
 const styles = StyleSheet.create({
   badge: {
     backgroundColor: Colors.danger,
-    borderRadius: 12,
+    borderRadius: scale(12),
     justifyContent: 'center',
     alignItems: 'center',
-    minWidth: 20,
-    paddingHorizontal: 6,
+    minWidth: scale(20),
+    paddingHorizontal: scaleSpacing(6),
   },
   small: {
-    height: 16,
-    minWidth: 16,
+    height: scale(16),
+    minWidth: scale(16),
   },
   medium: {
-    height: 20,
-    minWidth: 20,
+    height: scale(20),
+    minWidth: scale(20),
   },
   badgeText: {
     color: Colors.textWhite,
-    fontSize: FontSizes.xs,
+    fontSize: scaleFontSize(FontSizes.xs),
     fontWeight: '600',
   },
   smallText: {
-    fontSize: 10,
+    fontSize: scaleFontSize(10),
   },
 });

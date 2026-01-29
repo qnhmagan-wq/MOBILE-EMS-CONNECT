@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
+import { scale, scaleFontSize, scaleSpacing } from "@/src/utils/responsive";
 
 export default function ResponderHomeScreen() {
   const { user } = useAuth();
@@ -25,7 +26,7 @@ export default function ResponderHomeScreen() {
         contentContainerStyle={styles.content}
       >
         <View style={styles.header}>
-          <Ionicons name="medical" size={48} color={Colors.primary} />
+          <Ionicons name="medical" size={scale(48)} color={Colors.primary} />
           <Text style={styles.title}>EMS Connect Responder</Text>
           {user?.name && (
             <Text style={styles.welcomeText}>Welcome, {user.name}</Text>
@@ -36,7 +37,7 @@ export default function ResponderHomeScreen() {
         {error && (
           <View style={styles.errorCard}>
             <View style={styles.errorHeader}>
-              <Ionicons name="alert-circle" size={24} color="#EF4444" />
+              <Ionicons name="alert-circle" size={scale(24)} color="#EF4444" />
               <Text style={styles.errorTitle}>Error</Text>
             </View>
             <Text style={styles.errorText}>{error}</Text>
@@ -49,7 +50,7 @@ export default function ResponderHomeScreen() {
         {/* Location Tracking Status */}
         <View style={styles.trackingStatusCard}>
           <View style={styles.trackingHeader}>
-            <Ionicons name="location" size={24} color={Colors.primary} />
+            <Ionicons name="location" size={scale(24)} color={Colors.primary} />
             <Text style={styles.trackingTitle}>Location Tracking</Text>
           </View>
           <View style={styles.trackingStatusRow}>
@@ -84,7 +85,7 @@ export default function ResponderHomeScreen() {
 
           {!hasLocationPermission && (
             <View style={styles.permissionWarning}>
-              <Ionicons name="warning" size={16} color="#F59E0B" />
+              <Ionicons name="warning" size={scale(16)} color="#F59E0B" />
               <Text style={styles.permissionWarningText}>
                 Location permission required for automatic tracking
               </Text>
@@ -99,7 +100,7 @@ export default function ResponderHomeScreen() {
             <View style={styles.serviceItem}>
               <Ionicons
                 name="location"
-                size={20}
+                size={scale(20)}
                 color={isTrackingActive ? '#10B981' : '#6B7280'}
               />
               <Text style={[styles.serviceText, { color: isTrackingActive ? '#10B981' : '#6B7280' }]}>
@@ -112,7 +113,7 @@ export default function ResponderHomeScreen() {
             <View style={styles.serviceItem}>
               <Ionicons
                 name="notifications"
-                size={20}
+                size={scale(20)}
                 color={isTrackingActive ? '#10B981' : '#6B7280'}
               />
               <Text style={[styles.serviceText, { color: isTrackingActive ? '#10B981' : '#6B7280' }]}>
@@ -128,7 +129,7 @@ export default function ResponderHomeScreen() {
         {/* Active Dispatches Summary */}
         <View style={styles.dispatchSummaryCard}>
           <View style={styles.summaryHeader}>
-            <Ionicons name="flash" size={24} color={Colors.primary} />
+            <Ionicons name="flash" size={scale(24)} color={Colors.primary} />
             <Text style={styles.summaryTitle}>Active Dispatches</Text>
           </View>
           <Text style={styles.summaryCount}>
@@ -138,7 +139,7 @@ export default function ResponderHomeScreen() {
 
         {/* Info Card */}
         <View style={styles.infoCard}>
-          <Ionicons name="information-circle" size={24} color={Colors.primary} />
+          <Ionicons name="information-circle" size={scale(24)} color={Colors.primary} />
           <Text style={styles.infoText}>
             {isTrackingActive
               ? isBackendConfirmed
@@ -153,7 +154,7 @@ export default function ResponderHomeScreen() {
         <View style={[styles.readyCard, { backgroundColor: isTrackingActive ? '#f0fdf4' : '#f3f4f6', borderColor: isTrackingActive ? '#10B981' : '#9CA3AF' }]}>
           <Ionicons
             name={isTrackingActive ? "checkmark-circle" : "moon"}
-            size={32}
+            size={scale(32)}
             color={isTrackingActive ? '#10B981' : '#6B7280'}
           />
           <Text style={[styles.readyText, { color: isTrackingActive ? '#10B981' : '#6B7280' }]}>
@@ -258,9 +259,9 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   trackingIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: scale(12),
+    height: scale(12),
+    borderRadius: scale(6),
   },
   trackingStatusText: {
     fontSize: FontSizes.md,
@@ -278,9 +279,9 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   backendStatusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: scale(10),
+    height: scale(10),
+    borderRadius: scale(5),
   },
   backendStatusTextContainer: {
     flex: 1,
@@ -338,9 +339,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   activeIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: scale(8),
+    height: scale(8),
+    borderRadius: scale(4),
     backgroundColor: "#10B981",
   },
   // Dispatch Summary Card

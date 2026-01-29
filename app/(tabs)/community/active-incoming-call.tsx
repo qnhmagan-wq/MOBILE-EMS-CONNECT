@@ -12,6 +12,11 @@ import { useRouter } from 'expo-router';
 import { useIncomingCall } from '@/src/contexts/IncomingCallContext';
 import { useAgoraCall } from '@/src/hooks/useAgoraCall';
 import { Colors, Spacing, FontSizes } from '@/src/config/theme';
+import {
+  scale,
+  scaleFontSize,
+  scaleSpacing,
+} from '@/src/utils/responsive';
 
 export default function ActiveIncomingCallScreen() {
   const router = useRouter();
@@ -66,7 +71,7 @@ export default function ActiveIncomingCallScreen() {
         {callState.isInCall ? (
           <>
             <View style={styles.activeCallContainer}>
-              <Ionicons name="call" size={64} color="#FFFFFF" />
+              <Ionicons name="call" size={scale(64)} color="#FFFFFF" />
             </View>
             <Text style={styles.adminName}>{incomingCall.admin_caller.name}</Text>
             <Text style={styles.durationText}>{formatDuration(callState.callDuration)}</Text>
@@ -78,7 +83,7 @@ export default function ActiveIncomingCallScreen() {
               <View style={styles.pulseOuter} />
               <View style={styles.pulseMiddle} />
               <View style={styles.pulseInner} />
-              <Ionicons name="call" size={48} color="#FFFFFF" style={styles.callIcon} />
+              <Ionicons name="call" size={scale(48)} color="#FFFFFF" style={styles.callIcon} />
             </View>
             <Text style={styles.statusText}>Connecting...</Text>
             <Text style={styles.subText}>Please wait while we connect you</Text>
@@ -95,7 +100,7 @@ export default function ActiveIncomingCallScreen() {
           >
             <Ionicons
               name={callState.isMuted ? 'mic-off' : 'mic'}
-              size={28}
+              size={scale(28)}
               color="#FFFFFF"
               style={styles.buttonIcon}
             />
@@ -111,7 +116,7 @@ export default function ActiveIncomingCallScreen() {
         >
           <Ionicons
             name="call"
-            size={28}
+            size={scale(28)}
             color="#FFFFFF"
             style={[styles.buttonIcon, styles.endCallIcon]}
           />
@@ -122,6 +127,9 @@ export default function ActiveIncomingCallScreen() {
   );
 }
 
+const activeCallSize = scale(140);
+const connectingSize = scale(160);
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -131,57 +139,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: scaleSpacing(20),
+    paddingVertical: scaleSpacing(16),
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: scaleFontSize(20),
     fontWeight: '700',
     color: '#FFFFFF',
   },
   placeholder: {
-    width: 40,
+    width: scale(40),
   },
   statusContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: scaleSpacing(40),
   },
   activeCallContainer: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: activeCallSize,
+    height: activeCallSize,
+    borderRadius: activeCallSize / 2,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: scaleSpacing(30),
   },
   connectingContainer: {
-    width: 160,
-    height: 160,
+    width: connectingSize,
+    height: connectingSize,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: scaleSpacing(40),
   },
   pulseOuter: {
     position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
+    width: connectingSize,
+    height: connectingSize,
+    borderRadius: connectingSize / 2,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   pulseMiddle: {
     position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: connectingSize * 0.75,
+    height: connectingSize * 0.75,
+    borderRadius: (connectingSize * 0.75) / 2,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   pulseInner: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: connectingSize * 0.5,
+    height: connectingSize * 0.5,
+    borderRadius: (connectingSize * 0.5) / 2,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -190,45 +198,45 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   adminName: {
-    fontSize: FontSizes.xxl,
+    fontSize: scaleFontSize(FontSizes.xxl),
     fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 10,
+    marginBottom: scaleSpacing(10),
     textAlign: 'center',
   },
   statusText: {
-    fontSize: 28,
+    fontSize: scaleFontSize(28),
     fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 10,
+    marginBottom: scaleSpacing(10),
   },
   durationText: {
-    fontSize: 56,
+    fontSize: scaleFontSize(56),
     fontWeight: '900',
     color: '#FFFFFF',
-    marginVertical: 20,
+    marginVertical: scaleSpacing(20),
     fontVariant: ['tabular-nums'],
   },
   subText: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: scaleFontSize(24),
   },
   controls: {
-    padding: 30,
-    gap: 15,
+    padding: scaleSpacing(30),
+    gap: scaleSpacing(15),
   },
   button: {
     flexDirection: 'row',
-    padding: 20,
-    borderRadius: 16,
+    padding: scaleSpacing(20),
+    borderRadius: scale(16),
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: scaleSpacing(12),
   },
   buttonIcon: {
-    marginRight: 4,
+    marginRight: scaleSpacing(4),
   },
   muteButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -247,7 +255,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontWeight: '700',
   },
 });

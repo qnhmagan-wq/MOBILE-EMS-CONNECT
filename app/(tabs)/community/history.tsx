@@ -8,6 +8,7 @@ import UnreadBadge from "@/components/UnreadBadge";
 import { Incident } from "@/src/types/incident.types";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import * as incidentService from "@/src/services/incident.service";
+import { scale, scaleFontSize, scaleSpacing } from "@/src/utils/responsive";
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -128,7 +129,7 @@ export default function HistoryScreen() {
                 <View style={styles.cardHeaderLeft}>
                   <Ionicons
                     name={getIncidentIcon(incident.type) as any}
-                    size={24}
+                    size={scale(24)}
                     color={Colors.primary}
                   />
                   <Text style={styles.incidentType}>
@@ -146,7 +147,7 @@ export default function HistoryScreen() {
               </Text>
 
               <View style={styles.incidentLocation}>
-                <Ionicons name="location" size={16} color={Colors.textSecondary} />
+                <Ionicons name="location" size={scale(16)} color={Colors.textSecondary} />
                 <Text style={styles.locationText} numberOfLines={1}>
                   {incident.address}
                 </Text>
@@ -156,7 +157,7 @@ export default function HistoryScreen() {
                 <Text style={styles.dateText}>
                   {formatDate(incident.created_at)}
                 </Text>
-                <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+                <Ionicons name="chevron-forward" size={scale(20)} color={Colors.textSecondary} />
               </View>
             </TouchableOpacity>
           ))
@@ -183,7 +184,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.lg,
-    paddingTop: 60,
+    paddingTop: scaleSpacing(60),
   },
   header: {
     marginBottom: Spacing.xl,
@@ -206,7 +207,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xl,
   },
   emptyIcon: {
-    fontSize: 48,
+    fontSize: scaleFontSize(48),
     marginBottom: Spacing.md,
   },
   emptyTitle: {

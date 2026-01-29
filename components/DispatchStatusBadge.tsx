@@ -30,6 +30,8 @@ export const DispatchStatusBadge: React.FC<DispatchStatusBadgeProps> = ({
         return { label: 'EN ROUTE', color: '#F59E0B' };
       case 'arrived':
         return { label: 'ON SCENE', color: '#8B5CF6' };
+      case 'transporting_to_hospital':
+        return { label: 'TRANSPORTING', color: '#3B82F6' };
       case 'completed':
         return { label: 'COMPLETED', color: '#10B981' };
       default:

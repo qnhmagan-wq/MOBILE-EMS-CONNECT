@@ -36,7 +36,7 @@ export default function ResponderIncidentDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showPreArrivalModal, setShowPreArrivalModal] = useState(false);
-  const [preArrivalData, setPreArrivalData] = useState<PreArrivalData | null>(null);
+  const [preArrivalData, setPreArrivalData] = useState<PreArrivalData[]>([]);
   const isMounted = useRef(true); // Track if component is mounted
 
   // Helper to check if pre-arrival form should be available
@@ -95,15 +95,97 @@ export default function ResponderIncidentDetailsScreen() {
         ];
       case 'arrived':
         return [
-          { status: 'completed' as DispatchStatus, label: 'Complete Incident', icon: 'checkmark-done-circle', color: '#10B981' },
+          { status: 'transporting_to_hospital' as DispatchStatus, label: 'Going to Hospital', icon: 'medical', color: '#3B82F6', isPrimary: true },
+          { status: 'completed' as DispatchStatus, label: 'Complete Without Transport', icon: 'checkmark-done-circle', color: '#10B981', isSecondary: true },
+        ];
+      case 'transporting_to_hospital':
+        return [
+          { status: 'completed' as DispatchStatus, label: 'Complete at Hospital', icon: 'checkmark-done-circle', color: '#10B981' },
         ];
       default:
         return [];
     }
   };
 
+  const handleGoingToHospital = async () => {
+    if (!dispatch) return;
+
+    setIsUpdating(true);
+    try {
+      const response = await updateStatus(dispatch.id, 'transporting_to_hospital');
+
+      // Check if hospital route data was returned
+      if (response?.hospital_route) {
+        // Navigate to hospital navigation screen
+        if (isMounted.current) {
+          router.push(
+            `/(tabs)/responder/hospital-navigation?dispatchId=${dispatch.id}`
+          );
+        }
+      } else {
+        // Route data missing (shouldn't happen, but handle gracefully)
+        Alert.alert('Error', 'Hospital route information unavailable. Please try again.');
+      }
+    } catch (error: any) {
+      handleHospitalTransportError(error);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleHospitalTransportError = (error: any) => {
+    const errorCode = error.response?.data?.error_code;
+
+    switch (errorCode) {
+      case 'NO_HOSPITAL_ASSIGNED':
+        Alert.alert(
+          'No Hospital Assigned',
+          'Please contact your administrator to assign a hospital to your profile.',
+          [{ text: 'OK' }]
+        );
+        break;
+
+      case 'HOSPITAL_INACTIVE':
+        Alert.alert(
+          'Hospital Unavailable',
+          'The assigned hospital is currently inactive. Please contact dispatch.',
+          [{ text: 'OK' }]
+        );
+        break;
+
+      case 'HOSPITAL_NO_LOCATION':
+        Alert.alert(
+          'Location Unavailable',
+          'Hospital location data is missing. Please contact dispatch.',
+          [{ text: 'OK' }]
+        );
+        break;
+
+      case 'INVALID_STATUS_TRANSITION':
+        Alert.alert(
+          'Invalid Action',
+          'You must arrive at the incident before transporting to hospital.',
+          [{ text: 'OK' }]
+        );
+        break;
+
+      default:
+        Alert.alert(
+          'Error',
+          error.response?.data?.message || 'Failed to start hospital transport. Please try again.',
+          [{ text: 'OK' }]
+        );
+    }
+  };
+
   const handleStatusUpdate = async (newStatus: DispatchStatus) => {
     if (!dispatch) return;
+
+    // Special handler for hospital transport
+    if (newStatus === 'transporting_to_hospital') {
+      handleGoingToHospital();
+      return;
+    }
 
     Alert.alert(
       'Update Dispatch Status',
@@ -247,6 +329,11 @@ export default function ResponderIncidentDetailsScreen() {
                   At scene for {getElapsedTime(dispatch.arrived_at)}
                 </Text>
               )}
+              {dispatch.transporting_to_hospital_at && dispatch.status === 'transporting_to_hospital' && (
+                <Text style={styles.elapsedTime}>
+                  Transporting for {getElapsedTime(dispatch.transporting_to_hospital_at)}
+                </Text>
+              )}
             </View>
             <DispatchStatusBadge status={dispatch.status} size="large" />
           </View>
@@ -351,6 +438,13 @@ export default function ResponderIncidentDetailsScreen() {
             />
 
             <TimelineItem
+              label="Transporting to Hospital"
+              time={dispatch.transporting_to_hospital_at}
+              icon="medical"
+              color="#3B82F6"
+            />
+
+            <TimelineItem
               label="Incident Completed"
               time={dispatch.completed_at}
               icon="checkmark-done"
@@ -364,16 +458,20 @@ export default function ResponderIncidentDetailsScreen() {
         {dispatch && getAvailableActions(dispatch.status).length > 0 && (
           <View style={styles.statusActionsContainer}>
             <Text style={styles.actionsTitle}>Update Status</Text>
-            {getAvailableActions(dispatch.status).map((action) => (
+            {getAvailableActions(dispatch.status).map((action: any) => (
               <TouchableOpacity
                 key={action.status}
-                style={[styles.statusActionButton, { backgroundColor: action.color }]}
+                style={[
+                  styles.statusActionButton,
+                  { backgroundColor: action.color },
+                  action.isSecondary && styles.secondaryButton
+                ]}
                 onPress={() => handleStatusUpdate(action.status)}
                 disabled={isUpdating}
               >
-                <Ionicons name={action.icon as any} size={24} color={Colors.textWhite} />
-                <Text style={styles.statusActionText}>{action.label}</Text>
-                {isUpdating && <ActivityIndicator color={Colors.textWhite} size="small" />}
+                <Ionicons name={action.icon as any} size={24} color={action.isSecondary ? action.color : Colors.textWhite} />
+                <Text style={[styles.statusActionText, action.isSecondary && styles.secondaryButtonText]}>{action.label}</Text>
+                {isUpdating && <ActivityIndicator color={action.isSecondary ? action.color : Colors.textWhite} size="small" />}
               </TouchableOpacity>
             ))}
           </View>
@@ -384,16 +482,18 @@ export default function ResponderIncidentDetailsScreen() {
           {/* Pre-Arrival Button - only show when en_route or arrived */}
           {canShowPreArrival && (
             <TouchableOpacity
-              style={[styles.actionButton, preArrivalData && styles.preArrivalSubmittedButton]}
+              style={[styles.actionButton, preArrivalData.length > 0 && styles.preArrivalSubmittedButton]}
               onPress={() => setShowPreArrivalModal(true)}
             >
               <Ionicons
-                name={preArrivalData ? "checkmark-document" : "document-text"}
+                name={preArrivalData.length > 0 ? "checkmark-document" : "document-text"}
                 size={24}
                 color={Colors.textWhite}
               />
               <Text style={styles.actionButtonText}>
-                {preArrivalData ? 'Update Pre-Arrival Info' : 'Pre-Arrival Info (Optional)'}
+                {preArrivalData.length > 0
+                  ? `Update Pre-Arrival Info (${preArrivalData.length} patient${preArrivalData.length > 1 ? 's' : ''})`
+                  : 'Pre-Arrival Info (Optional)'}
               </Text>
             </TouchableOpacity>
           )}
@@ -432,11 +532,10 @@ export default function ResponderIncidentDetailsScreen() {
           dispatchId={dispatch.id}
           incidentType={incident?.type}
           callerNameDefault={dispatch.incident?.reporter?.name}
-          existingData={preArrivalData}
-          onSuccess={() => {
-            console.log('[IncidentDetails] Pre-arrival info submitted successfully');
-            // Note: In a real implementation, we would fetch the updated pre-arrival data
-            // from the API response. For now, we just log the success.
+          existingData={preArrivalData.length > 0 ? preArrivalData : null}
+          onSuccess={(patients) => {
+            console.log('[IncidentDetails] Pre-arrival info submitted:', patients.length, 'patient(s)');
+            setPreArrivalData(patients);
           }}
         />
       )}
@@ -637,6 +736,14 @@ const styles = StyleSheet.create({
     color: Colors.textWhite,
     fontSize: FontSizes.md,
     fontWeight: "600",
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#10B981',
+  },
+  secondaryButtonText: {
+    color: '#10B981',
   },
 });
 

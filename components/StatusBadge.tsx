@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { IncidentStatus } from '@/src/types/incident.types';
+import { scale, scaleFontSize, scaleSpacing } from '@/src/utils/responsive';
 
 interface StatusBadgeProps {
   status: IncidentStatus;
@@ -26,8 +27,8 @@ export const getStatusColor = (status: IncidentStatus) => {
 
 export default function StatusBadge({ status, size = 'medium' }: StatusBadgeProps) {
   const colors = getStatusColor(status);
-  const fontSize = size === 'small' ? 10 : size === 'large' ? 14 : 12;
-  const padding = size === 'small' ? 4 : size === 'large' ? 12 : 8;
+  const fontSize = size === 'small' ? scaleFontSize(10) : size === 'large' ? scaleFontSize(14) : scaleFontSize(12);
+  const padding = size === 'small' ? scaleSpacing(4) : size === 'large' ? scaleSpacing(12) : scaleSpacing(8);
 
   return (
     <View style={[styles.badge, { backgroundColor: colors.bg, padding }]}>
@@ -40,7 +41,7 @@ export default function StatusBadge({ status, size = 'medium' }: StatusBadgeProp
 
 const styles = StyleSheet.create({
   badge: {
-    borderRadius: 8,
+    borderRadius: scale(8),
     alignSelf: 'flex-start',
   },
   text: {

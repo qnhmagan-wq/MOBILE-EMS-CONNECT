@@ -20,6 +20,9 @@ import {
   Dispatch,
   PreArrivalRequest,
   PreArrivalResponse,
+  MultiPatientPreArrivalRequest,
+  MultiPatientPreArrivalResponse,
+  GetHospitalRouteResponse,
 } from '@/src/types/dispatch.types';
 
 /**
@@ -91,11 +94,16 @@ export const updateDutyStatus = async (
 /**
  * Get all dispatches assigned to the current responder
  * GET /api/responder/dispatches
+ * Returns assigned dispatches and nearby pending incidents
  */
-export const getDispatches = async (): Promise<Dispatch[]> => {
+export const getDispatches = async (): Promise<GetDispatchesResponse> => {
   try {
     const response = await api.get<GetDispatchesResponse>('/responder/dispatches');
-    return response.data.dispatches;
+    console.log('[Dispatch Service] Fetched dispatches:', {
+      assignedCount: response.data.dispatches?.length || 0,
+      nearbyCount: response.data.nearby_incidents?.length || 0
+    });
+    return response.data;
   } catch (error: any) {
     console.error('[Dispatch Service] Get dispatches error:', error.response?.data || error.message);
     throw error;
@@ -123,7 +131,7 @@ export const updateDispatchStatus = async (
 };
 
 /**
- * Submit pre-arrival patient information
+ * Submit pre-arrival patient information (single patient - legacy)
  * POST /api/responder/dispatches/:dispatchId/pre-arrival
  */
 export const submitPreArrival = async (
@@ -146,6 +154,79 @@ export const submitPreArrival = async (
     return response.data;
   } catch (error: any) {
     console.error('[Dispatch Service] Submit pre-arrival error:', {
+      status: error.response?.status,
+      data: error.response?.data || error.message,
+      dispatchId,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+};
+
+/**
+ * Submit multi-patient pre-arrival information
+ * POST /api/responder/dispatches/:dispatchId/pre-arrival
+ */
+export const submitMultiPatientPreArrival = async (
+  dispatchId: number,
+  patients: MultiPatientPreArrivalRequest['patients']
+): Promise<MultiPatientPreArrivalResponse> => {
+  try {
+    console.log('[Dispatch Service] Submitting multi-patient pre-arrival:', {
+      dispatchId,
+      patientCount: patients.length,
+      timestamp: new Date().toISOString()
+    });
+
+    const response = await api.post<MultiPatientPreArrivalResponse>(
+      `/responder/dispatches/${dispatchId}/pre-arrival`,
+      { patients }
+    );
+
+    console.log('[Dispatch Service] Multi-patient pre-arrival submitted:', {
+      patientCount: response.data.patient_count,
+      message: response.data.message,
+    });
+
+    return response.data;
+  } catch (error: any) {
+    console.error('[Dispatch Service] Submit multi-patient error:', {
+      status: error.response?.status,
+      data: error.response?.data || error.message,
+      dispatchId,
+      patientCount: patients.length,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+};
+
+/**
+ * Get hospital route for dispatch
+ * GET /api/responder/dispatches/:dispatchId/hospital-route
+ */
+export const getHospitalRoute = async (
+  dispatchId: number
+): Promise<GetHospitalRouteResponse> => {
+  try {
+    console.log('[Dispatch Service] Fetching hospital route:', {
+      dispatchId,
+      timestamp: new Date().toISOString()
+    });
+
+    const response = await api.get<GetHospitalRouteResponse>(
+      `/responder/dispatches/${dispatchId}/hospital-route`
+    );
+
+    console.log('[Dispatch Service] Hospital route fetched successfully:', {
+      hospitalName: response.data.hospital.name,
+      distance: response.data.route.distance_text,
+      duration: response.data.route.duration_text,
+    });
+
+    return response.data;
+  } catch (error: any) {
+    console.error('[Dispatch Service] Get hospital route error:', {
       status: error.response?.status,
       data: error.response?.data || error.message,
       dispatchId,

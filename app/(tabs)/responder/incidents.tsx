@@ -5,13 +5,15 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
-import { Dispatch, DispatchStatus } from "@/src/types/dispatch.types";
+import { Dispatch, DispatchStatus, NearbyIncident } from "@/src/types/dispatch.types";
+import { Alert, Linking } from "react-native";
 
 export default function ResponderIncidentsScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { activeDispatches, isTrackingActive } = useDispatch();
+  const { activeDispatches, nearbyIncidents, isTrackingActive, updateDispatchStatus } = useDispatch();
   const [status, setStatus] = React.useState<'Available' | 'Busy'>('Available');
+  const [acceptingIncident, setAcceptingIncident] = React.useState<number | null>(null);
 
   const getPriority = (type: string): 'HIGH' | 'MID' | 'LOW' => {
     if (type === 'medical' || type === 'fire') {
@@ -72,17 +74,50 @@ export default function ResponderIncidentsScreen() {
   const getIncidentIcon = (type: string) => {
     switch (type) {
       case 'medical':
-        return 'medical';
+        return '🏥';
       case 'fire':
-        return 'flame';
+        return '🔥';
       case 'accident':
-        return 'car';
+        return '🚗';
       case 'crime':
-        return 'shield';
+        return '🚨';
       case 'natural_disaster':
-        return 'warning';
+        return '⚠️';
       default:
-        return 'alert-circle';
+        return '❗';
+    }
+  };
+
+  const handleAcceptNearbyIncident = async (incident: NearbyIncident) => {
+    if (!incident.can_accept) {
+      Alert.alert('Cannot Accept', 'This incident is no longer available or you already have an active dispatch.');
+      return;
+    }
+
+    setAcceptingIncident(incident.incident_id);
+    try {
+      // Create a new dispatch by accepting the nearby incident
+      // This would need a new API endpoint: POST /api/responder/incidents/{id}/accept
+      // For now, we'll show an alert
+      Alert.alert(
+        'Accept Nearby Incident',
+        `Accept this ${incident.type} emergency ${incident.distance_text} away?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Accept',
+            onPress: async () => {
+              // TODO: Implement accept nearby incident API call
+              Alert.alert('Feature Coming Soon', 'This feature requires backend support to accept nearby incidents.');
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('[Incidents] Accept nearby incident error:', error);
+      Alert.alert('Error', 'Failed to accept incident. Please try again.');
+    } finally {
+      setAcceptingIncident(null);
     }
   };
 
@@ -144,11 +179,9 @@ export default function ResponderIncidentsScreen() {
               >
                 <View style={styles.cardHeader}>
                   <View style={styles.cardHeaderLeft}>
-                    <Ionicons
-                      name={getIncidentIcon(dispatch.incident?.type || 'alert-circle') as any}
-                      size={24}
-                      color={Colors.textWhite}
-                    />
+                    <Text style={styles.emergencyIcon}>
+                      {getIncidentIcon(dispatch.incident?.type || '')}
+                    </Text>
                     <Text style={styles.incidentTitle}>
                       {dispatch.incident
                         ? dispatch.incident.type.charAt(0).toUpperCase() + dispatch.incident.type.slice(1).replace('_', ' ')
@@ -170,6 +203,14 @@ export default function ResponderIncidentsScreen() {
                     {dispatch.incident?.address || 'Address unavailable'}
                   </Text>
                 </View>
+                {dispatch.incident?.description && (
+                  <View style={styles.descriptionRow}>
+                    <Text style={styles.warningIcon}>⚠️</Text>
+                    <Text style={styles.descriptionPreview} numberOfLines={2}>
+                      {dispatch.incident.description}
+                    </Text>
+                  </View>
+                )}
                 {dispatch.distance_text && (
                   <View style={styles.distanceRow}>
                     <Ionicons name="navigate" size={16} color={Colors.textWhite} />
@@ -182,6 +223,59 @@ export default function ResponderIncidentsScreen() {
             );
           })}
         </ScrollView>
+      )}
+
+      {/* Nearby Incidents Section */}
+      {isTrackingActive && nearbyIncidents.length > 0 && (
+        <View style={styles.nearbySection}>
+          <View style={styles.nearbySectionHeader}>
+            <Ionicons name="radio-outline" size={20} color={Colors.textSecondary} />
+            <Text style={styles.nearbySectionTitle}>Nearby Incidents ({nearbyIncidents.length})</Text>
+          </View>
+          <ScrollView style={styles.nearbyScrollView} contentContainerStyle={styles.nearbyList} horizontal>
+            {nearbyIncidents.map((incident) => (
+              <TouchableOpacity
+                key={incident.incident_id}
+                style={styles.nearbyCard}
+                onPress={() => handleAcceptNearbyIncident(incident)}
+                disabled={!incident.can_accept || acceptingIncident === incident.incident_id}
+              >
+                <View style={styles.nearbyHeader}>
+                  <Text style={styles.nearbyEmergencyIcon}>
+                    {getIncidentIcon(incident.type)}
+                  </Text>
+                  <Text style={styles.nearbyTitle} numberOfLines={1}>
+                    {incident.type.charAt(0).toUpperCase() + incident.type.slice(1).replace('_', ' ')}
+                  </Text>
+                </View>
+                <View style={styles.nearbyLocation}>
+                  <Ionicons name="location" size={14} color={Colors.textSecondary} />
+                  <Text style={styles.nearbyLocationText} numberOfLines={1}>
+                    {incident.address}
+                  </Text>
+                </View>
+                {incident.description && (
+                  <Text style={styles.nearbyDescription} numberOfLines={2}>
+                    {incident.description}
+                  </Text>
+                )}
+                <View style={styles.nearbyDistance}>
+                  <Ionicons name="navigate" size={14} color={Colors.textSecondary} />
+                  <Text style={styles.nearbyDistanceText}>
+                    {incident.distance_text} • {incident.duration_text}
+                  </Text>
+                </View>
+                {incident.can_accept && (
+                  <View style={styles.nearbyAcceptButton}>
+                    <Text style={styles.nearbyAcceptText}>
+                      {acceptingIncident === incident.incident_id ? 'Accepting...' : 'Tap to Accept'}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
       )}
 
       {/* Bottom Red Section */}
@@ -309,6 +403,10 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     flex: 1,
   },
+  emergencyIcon: {
+    fontSize: 28,
+    marginRight: Spacing.xs,
+  },
   incidentTitle: {
     fontSize: FontSizes.lg,
     fontWeight: "bold",
@@ -349,6 +447,25 @@ const styles = StyleSheet.create({
     color: Colors.textWhite,
     flex: 1,
   },
+  descriptionRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
+  warningIcon: {
+    fontSize: 16,
+    marginTop: 2,
+  },
+  descriptionPreview: {
+    fontSize: FontSizes.sm,
+    color: Colors.textWhite,
+    flex: 1,
+    lineHeight: 18,
+  },
   distanceRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -377,6 +494,98 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.sm,
     color: Colors.textSecondary,
     textAlign: "center",
+  },
+  nearbySection: {
+    backgroundColor: Colors.surface,
+    paddingVertical: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  nearbySectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
+  nearbySectionTitle: {
+    fontSize: FontSizes.md,
+    fontWeight: "600",
+    color: Colors.textSecondary,
+  },
+  nearbyScrollView: {
+    paddingHorizontal: Spacing.lg,
+  },
+  nearbyList: {
+    gap: Spacing.md,
+  },
+  nearbyCard: {
+    width: 250,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  nearbyHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  nearbyEmergencyIcon: {
+    fontSize: 20,
+  },
+  nearbyTitle: {
+    fontSize: FontSizes.md,
+    fontWeight: "600",
+    color: Colors.textPrimary,
+    flex: 1,
+  },
+  nearbyLocation: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  nearbyLocationText: {
+    fontSize: FontSizes.xs,
+    color: Colors.textSecondary,
+    flex: 1,
+  },
+  nearbyDescription: {
+    fontSize: FontSizes.xs,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.xs,
+    lineHeight: 16,
+  },
+  nearbyDistance: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  nearbyDistanceText: {
+    fontSize: FontSizes.xs,
+    fontWeight: "600",
+    color: Colors.textPrimary,
+  },
+  nearbyAcceptButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    alignItems: "center",
+  },
+  nearbyAcceptText: {
+    fontSize: FontSizes.sm,
+    fontWeight: "600",
+    color: Colors.textWhite,
   },
   bottomSection: {
     height: 100,

@@ -19,15 +19,16 @@ export type ResponderStatus = 'idle' | 'busy' | 'offline';
 
 /**
  * Dispatch status lifecycle
- * assigned -> accepted/declined -> en_route -> arrived -> completed
+ * assigned -> accepted/declined -> en_route -> arrived -> transporting_to_hospital -> completed
  */
 export type DispatchStatus =
-  | 'assigned'    // Admin assigned responder to incident
-  | 'accepted'    // Responder accepted the dispatch
-  | 'declined'    // Responder declined the dispatch
-  | 'en_route'    // Responder is on the way
-  | 'arrived'     // Responder arrived at scene
-  | 'completed';  // Incident resolved
+  | 'assigned'                    // Admin assigned responder to incident
+  | 'accepted'                    // Responder accepted the dispatch
+  | 'declined'                    // Responder declined the dispatch
+  | 'en_route'                    // Responder is on the way
+  | 'arrived'                     // Responder arrived at scene
+  | 'transporting_to_hospital'    // Responder is transporting patient to hospital
+  | 'completed';                  // Incident resolved
 
 /**
  * Dispatch assignment with incident details
@@ -46,6 +47,7 @@ export interface Dispatch {
   declined_at?: string | null;
   en_route_at?: string | null;
   arrived_at?: string | null;
+  transporting_to_hospital_at?: string | null;
   completed_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -65,6 +67,9 @@ export interface Dispatch {
       phone_number: string;
     };
   };
+
+  // Hospital route information (available when status is arrived or transporting_to_hospital)
+  hospital_route?: HospitalRouteData | null;
 }
 
 /**
@@ -118,10 +123,40 @@ export interface LocationUpdateResponse {
 }
 
 /**
+ * Nearby incident (pending, within 3km)
+ */
+export interface NearbyIncident {
+  incident_id: number;
+  type: string;
+  status: string;
+  distance_meters: number;
+  distance_text: string;
+  estimated_duration_seconds: number;
+  duration_text: string;
+  latitude: number;
+  longitude: number;
+  address: string;
+  description: string;
+  created_at: string;
+  can_accept: boolean;
+  reporter?: {
+    name: string;
+    phone_number: string;
+  };
+  route?: {
+    coordinates: Array<{ latitude: number; longitude: number }>;
+    distance_text: string;
+    duration_text: string;
+    method: string;
+  };
+}
+
+/**
  * Get dispatches response
  */
 export interface GetDispatchesResponse {
   dispatches: Dispatch[];
+  nearby_incidents?: NearbyIncident[];
 }
 
 /**
@@ -182,4 +217,93 @@ export interface PreArrivalData {
   caller_name?: string | null;
   estimated_arrival?: string | null;
   submitted_at: string;
+}
+
+/**
+ * Form data structure for UI state management (multi-patient)
+ */
+export interface PatientFormData {
+  patient_name: string;
+  sex: 'Male' | 'Female' | 'Other' | '';
+  age: string; // Keep as string for form input
+  incident_type: string;
+  caller_name?: string;
+  estimated_arrival?: string | null;
+}
+
+/**
+ * Multi-patient pre-arrival request format
+ */
+export interface MultiPatientPreArrivalRequest {
+  patients: Array<{
+    patient_name: string;
+    sex: 'Male' | 'Female' | 'Other';
+    age: number;
+    incident_type: string;
+    caller_name?: string;
+    estimated_arrival?: string;
+  }>;
+}
+
+/**
+ * Multi-patient pre-arrival response format
+ */
+export interface MultiPatientPreArrivalResponse {
+  message: string;
+  patient_count: number;
+  patients: PreArrivalData[];
+}
+
+/**
+ * Hospital information
+ */
+export interface Hospital {
+  id: number;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  phone_number: string;
+}
+
+/**
+ * Route coordinate point
+ */
+export interface RouteCoordinate {
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * Route calculation method
+ */
+export type RouteMethod = 'google_maps' | 'openrouteservice' | 'haversine';
+
+/**
+ * Route information from current location to hospital
+ */
+export interface RouteInfo {
+  distance_meters: number;
+  duration_seconds: number;
+  distance_text: string;
+  duration_text: string;
+  coordinates: RouteCoordinate[];
+  encoded_polyline?: string;
+  method: RouteMethod;
+}
+
+/**
+ * Hospital route data (hospital info + route)
+ */
+export interface HospitalRouteData {
+  hospital: Hospital;
+  route: RouteInfo;
+}
+
+/**
+ * Get hospital route response
+ */
+export interface GetHospitalRouteResponse {
+  hospital: Hospital;
+  route: RouteInfo;
 }

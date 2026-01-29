@@ -15,6 +15,7 @@ import { useRouter } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import ENV from "@/src/config/env";
+import { scale, scaleFontSize, scaleSpacing } from "@/src/utils/responsive";
 
 export default function SignupScreen() {
   const { signup } = useAuth();
@@ -500,7 +501,7 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     backgroundColor: "#8B5A3C",
     color: Colors.textWhite,
-    minHeight: 48,
+    minHeight: scale(48),
   },
   inputError: {
     borderColor: Colors.danger,
@@ -530,7 +531,7 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     alignItems: "center",
     marginTop: Spacing.md,
-    minHeight: 48,
+    minHeight: scale(48),
   },
   buttonDisabled: {
     backgroundColor: Colors.borderDark,

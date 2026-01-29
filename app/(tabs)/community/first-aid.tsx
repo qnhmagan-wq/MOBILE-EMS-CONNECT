@@ -1,13 +1,14 @@
 import React from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { Colors } from "@/src/config/theme";
+import { scale, scaleFontSize, scaleSpacing } from "@/src/utils/responsive";
 
 interface FirstAidItem {
   id: string;
   title: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  imageUrl: string;
   color: string;
 }
 
@@ -15,12 +16,42 @@ export default function FirstAidScreen() {
   const router = useRouter();
 
   const firstAidItems: FirstAidItem[] = [
-    { id: 'cpr', title: 'CPR', icon: 'heart', color: '#EF4444' },
-    { id: 'choking', title: 'Choking', icon: 'hand-left', color: '#F59E0B' },
-    { id: 'bleeding', title: 'Bleeding', icon: 'water', color: '#DC2626' },
-    { id: 'burns', title: 'Burns', icon: 'flame', color: '#F97316' },
-    { id: 'fractures', title: 'Fractures', icon: 'body', color: '#92400E' },
-    { id: 'seizures', title: 'Seizures', icon: 'warning', color: '#EAB308' },
+    {
+      id: 'cpr',
+      title: 'CPR',
+      imageUrl: 'https://images.unsplash.com/photo-1631217868264-e5b90bb7e133?w=400&h=300&fit=crop',
+      color: '#EF4444'
+    },
+    {
+      id: 'choking',
+      title: 'Choking',
+      imageUrl: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=400&h=300&fit=crop',
+      color: '#F59E0B'
+    },
+    {
+      id: 'bleeding',
+      title: 'Bleeding',
+      imageUrl: 'https://images.unsplash.com/photo-1603398938378-e54eab446dde?w=400&h=300&fit=crop',
+      color: '#DC2626'
+    },
+    {
+      id: 'burns',
+      title: 'Burns',
+      imageUrl: 'https://images.unsplash.com/photo-1584515933487-779824d29309?w=400&h=300&fit=crop',
+      color: '#F97316'
+    },
+    {
+      id: 'fractures',
+      title: 'Fractures',
+      imageUrl: 'https://images.unsplash.com/photo-1559757175-0eb30cd8c063?w=400&h=300&fit=crop',
+      color: '#92400E'
+    },
+    {
+      id: 'seizures',
+      title: 'Seizures',
+      imageUrl: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?w=400&h=300&fit=crop',
+      color: '#EAB308'
+    },
   ];
 
   return (
@@ -42,10 +73,15 @@ export default function FirstAidScreen() {
             onPress={() => router.push(`/(tabs)/community/first-aid-detail?id=${item.id}`)}
             activeOpacity={0.7}
           >
-            <View style={[styles.iconContainer, { backgroundColor: `${item.color}20` }]}>
-              <Ionicons name={item.icon} size={40} color={item.color} />
+            <Image
+              source={{ uri: item.imageUrl }}
+              style={styles.cardImage}
+              contentFit="cover"
+              transition={200}
+            />
+            <View style={styles.cardOverlay}>
+              <Text style={styles.cardTitle}>{item.title}</Text>
             </View>
-            <Text style={styles.cardTitle}>{item.title}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -60,54 +96,59 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: Colors.primary,
-    paddingTop: 60,
-    paddingBottom: 30,
-    paddingHorizontal: 20,
+    paddingTop: scaleSpacing(60),
+    paddingBottom: scaleSpacing(30),
+    paddingHorizontal: scaleSpacing(20),
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: scaleFontSize(28),
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginBottom: 8,
+    marginBottom: scaleSpacing(8),
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: "rgba(255, 255, 255, 0.8)",
   },
   content: {
     flex: 1,
   },
   gridContainer: {
-    padding: 20,
+    padding: scaleSpacing(20),
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
   },
   card: {
     width: "48%",
+    height: scale(180),
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    alignItems: "center",
+    borderRadius: scale(16),
+    marginBottom: scaleSpacing(16),
+    overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 12,
+  cardImage: {
+    width: "100%",
+    height: "100%",
+  },
+  cardOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingVertical: scaleSpacing(12),
+    paddingHorizontal: scaleSpacing(16),
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
+    fontSize: scaleFontSize(18),
+    fontWeight: "700",
+    color: "#FFFFFF",
     textAlign: "center",
   },
 });

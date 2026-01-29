@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Dispatch, DispatchStatus } from '@/src/types/dispatch.types';
+import { Dispatch, DispatchStatus, NearbyIncident } from '@/src/types/dispatch.types';
 import * as dispatchService from '@/src/services/dispatch.service';
 import * as notificationService from '@/src/services/notification.service';
 
@@ -15,6 +15,7 @@ const POLL_INTERVAL = 10000; // 10 seconds (was 5 seconds - reduced further to p
 export interface UseDispatchPollingReturn {
   dispatches: Dispatch[];
   activeDispatches: Dispatch[]; // Only active statuses
+  nearbyIncidents: NearbyIncident[]; // Nearby pending incidents
   isPolling: boolean;
   error: string | null;
   startPolling: () => void;
@@ -26,6 +27,7 @@ export interface UseDispatchPollingReturn {
 
 export const useDispatchPolling = (): UseDispatchPollingReturn => {
   const [dispatches, setDispatches] = useState<Dispatch[]>([]);
+  const [nearbyIncidents, setNearbyIncidents] = useState<NearbyIncident[]>([]);
   const [isPolling, setIsPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +39,9 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
    */
   const refreshDispatches = useCallback(async () => {
     try {
-      const fetchedDispatches = await dispatchService.getDispatches();
+      const response = await dispatchService.getDispatches();
+      const fetchedDispatches = response.dispatches || [];
+      const fetchedNearby = response.nearby_incidents || [];
 
       // Detect new dispatches (not seen before)
       const newDispatches = fetchedDispatches.filter(
@@ -53,6 +57,7 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
       lastSeenDispatchIds.current = new Set(fetchedDispatches.map((d) => d.id));
 
       setDispatches(fetchedDispatches);
+      setNearbyIncidents(fetchedNearby);
       setError(null);
     } catch (err: any) {
       console.error('[useDispatchPolling] Refresh error:', err);
@@ -164,6 +169,7 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
   return {
     dispatches,
     activeDispatches,
+    nearbyIncidents,
     isPolling,
     error,
     startPolling,

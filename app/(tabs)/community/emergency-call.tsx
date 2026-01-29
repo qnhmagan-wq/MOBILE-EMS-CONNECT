@@ -14,6 +14,11 @@ import { useAgoraCall } from '@/src/hooks/useAgoraCall';
 import { useIncidents } from '@/src/hooks/useIncidents';
 import { Colors } from '@/src/config/theme';
 import { IncidentType } from '@/src/types/incident.types';
+import {
+  scale,
+  scaleFontSize,
+  scaleSpacing,
+} from '@/src/utils/responsive';
 
 export default function EmergencyCallScreen() {
   const router = useRouter();
@@ -89,7 +94,7 @@ export default function EmergencyCallScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          <Ionicons name="arrow-back" size={scale(24)} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Emergency Call</Text>
         <View style={styles.placeholder} />
@@ -112,7 +117,7 @@ export default function EmergencyCallScreen() {
               <View style={styles.pulseOuter} />
               <View style={styles.pulseMiddle} />
               <View style={styles.pulseInner} />
-              <Ionicons name="call" size={48} color="#FFFFFF" style={styles.callIcon} />
+              <Ionicons name="call" size={scale(48)} color="#FFFFFF" style={styles.callIcon} />
             </View>
             <Text style={styles.statusText}>Connecting...</Text>
             <Text style={styles.subText}>Please wait while we connect you to emergency services</Text>
@@ -124,7 +129,7 @@ export default function EmergencyCallScreen() {
               <View style={[styles.pulseOuter, styles.pulseAnimated]} />
               <View style={[styles.pulseMiddle, styles.pulseAnimated]} />
               <View style={styles.pulseInner} />
-              <Ionicons name="call" size={48} color="#FFFFFF" style={styles.callIcon} />
+              <Ionicons name="call" size={scale(48)} color="#FFFFFF" style={styles.callIcon} />
             </View>
             <Text style={styles.statusText}>Calling...</Text>
             <Text style={styles.subText}>Waiting for emergency dispatcher to answer</Text>
@@ -133,7 +138,7 @@ export default function EmergencyCallScreen() {
         {callState.isInCall && (
           <>
             <View style={styles.activeCallContainer}>
-              <Ionicons name="call" size={64} color="#FFFFFF" />
+              <Ionicons name="call" size={scale(64)} color="#FFFFFF" />
             </View>
             <Text style={styles.statusText}>In Call</Text>
             <Text style={styles.durationText}>{formatDuration(callState.callDuration)}</Text>
@@ -143,7 +148,7 @@ export default function EmergencyCallScreen() {
         {!callState.isInCall && !callState.isConnecting && !callState.isWaitingForAnswer && !isStartingEmergency && (
           <>
             <View style={styles.readyContainer}>
-              <Ionicons name="call-outline" size={64} color="#FFFFFF" />
+              <Ionicons name="call-outline" size={scale(64)} color="#FFFFFF" />
             </View>
             <Text style={styles.statusText}>Ready</Text>
             <Text style={styles.subText}>Tap the button below to call emergency services</Text>
@@ -158,7 +163,7 @@ export default function EmergencyCallScreen() {
             style={[styles.button, styles.callButton]}
             onPress={() => handleStartCall('medical')}
           >
-            <Ionicons name="call" size={32} color="#FFFFFF" style={styles.buttonIcon} />
+            <Ionicons name="call" size={scale(32)} color="#FFFFFF" style={styles.buttonIcon} />
             <Text style={styles.buttonText}>Emergency Call</Text>
           </TouchableOpacity>
         )}
@@ -175,7 +180,7 @@ export default function EmergencyCallScreen() {
             style={[styles.button, styles.cancelButton]}
             onPress={handleEndCall}
           >
-            <Ionicons name="close-circle" size={28} color="#FFFFFF" style={styles.buttonIcon} />
+            <Ionicons name="close-circle" size={scale(28)} color="#FFFFFF" style={styles.buttonIcon} />
             <Text style={styles.buttonText}>Cancel Call</Text>
           </TouchableOpacity>
         )}
@@ -188,7 +193,7 @@ export default function EmergencyCallScreen() {
             >
               <Ionicons
                 name={callState.isMuted ? 'mic-off' : 'mic'}
-                size={28}
+                size={scale(28)}
                 color="#FFFFFF"
                 style={styles.buttonIcon}
               />
@@ -201,7 +206,7 @@ export default function EmergencyCallScreen() {
               style={[styles.button, styles.endButton]}
               onPress={handleEndCall}
             >
-              <Ionicons name="call" size={28} color="#FFFFFF" style={[styles.buttonIcon, styles.endCallIcon]} />
+              <Ionicons name="call" size={scale(28)} color="#FFFFFF" style={[styles.buttonIcon, styles.endCallIcon]} />
               <Text style={styles.buttonText}>End Call</Text>
             </TouchableOpacity>
           </>
@@ -210,6 +215,9 @@ export default function EmergencyCallScreen() {
     </SafeAreaView>
   );
 }
+
+const pulseSize = scale(160);
+const activeCallSize = scale(140);
 
 const styles = StyleSheet.create({
   container: {
@@ -220,54 +228,54 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: scaleSpacing(20),
+    paddingVertical: scaleSpacing(16),
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: scale(40),
+    height: scale(40),
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: scaleFontSize(20),
     fontWeight: '700',
     color: '#FFFFFF',
   },
   placeholder: {
-    width: 40,
+    width: scale(40),
   },
   statusContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: scaleSpacing(40),
   },
   pulseContainer: {
-    width: 160,
-    height: 160,
+    width: pulseSize,
+    height: pulseSize,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: scaleSpacing(40),
   },
   pulseOuter: {
     position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
+    width: pulseSize,
+    height: pulseSize,
+    borderRadius: pulseSize / 2,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   pulseMiddle: {
     position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: pulseSize * 0.75,
+    height: pulseSize * 0.75,
+    borderRadius: (pulseSize * 0.75) / 2,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   pulseInner: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: pulseSize * 0.5,
+    height: pulseSize * 0.5,
+    borderRadius: (pulseSize * 0.5) / 2,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -276,56 +284,56 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   activeCallContainer: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: activeCallSize,
+    height: activeCallSize,
+    borderRadius: activeCallSize / 2,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: scaleSpacing(30),
   },
   readyContainer: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: activeCallSize,
+    height: activeCallSize,
+    borderRadius: activeCallSize / 2,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: scaleSpacing(30),
   },
   statusText: {
-    fontSize: 28,
+    fontSize: scaleFontSize(28),
     fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 10,
+    marginBottom: scaleSpacing(10),
   },
   durationText: {
-    fontSize: 56,
+    fontSize: scaleFontSize(56),
     fontWeight: '900',
     color: '#FFFFFF',
-    marginVertical: 20,
+    marginVertical: scaleSpacing(20),
     fontVariant: ['tabular-nums'],
   },
   subText: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: scaleFontSize(24),
   },
   controls: {
-    padding: 30,
-    gap: 15,
+    padding: scaleSpacing(30),
+    gap: scaleSpacing(15),
   },
   button: {
     flexDirection: 'row',
-    padding: 20,
-    borderRadius: 16,
+    padding: scaleSpacing(20),
+    borderRadius: scale(16),
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: scaleSpacing(12),
   },
   buttonIcon: {
-    marginRight: 4,
+    marginRight: scaleSpacing(4),
   },
   callButton: {
     backgroundColor: '#10B981',
@@ -356,7 +364,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontWeight: '700',
   },
 });

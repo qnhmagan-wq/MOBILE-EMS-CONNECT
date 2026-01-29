@@ -11,7 +11,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { Alert, Platform, Linking } from 'react-native';
-import { DutyStatus, Dispatch, DispatchStatus } from '@/src/types/dispatch.types';
+import { DutyStatus, Dispatch, DispatchStatus, NearbyIncident } from '@/src/types/dispatch.types';
 import { useDispatchPolling } from '@/src/hooks/useDispatchPolling';
 import * as dispatchService from '@/src/services/dispatch.service';
 import * as locationService from '@/src/services/location.service';
@@ -38,6 +38,7 @@ export interface DispatchContextType {
   // Dispatches
   dispatches: Dispatch[];
   activeDispatches: Dispatch[];
+  nearbyIncidents: NearbyIncident[];
 
   // Actions
   autoStartTracking: () => Promise<void>;
@@ -71,6 +72,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const {
     dispatches,
     activeDispatches,
+    nearbyIncidents,
     isPolling,
     startPolling,
     stopPolling,
@@ -397,6 +399,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     isBackendConfirmed,
     dispatches,
     activeDispatches,
+    nearbyIncidents,
     autoStartTracking,
     stopTracking,
     updateDispatchStatus,

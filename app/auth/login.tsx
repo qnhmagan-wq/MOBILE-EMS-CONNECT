@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import ENV from "@/src/config/env";
+import { scale, scaleFontSize, scaleSpacing } from "@/src/utils/responsive";
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -241,8 +242,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   logo: {
-    width: 200,
-    height: 80,
+    width: scale(200),
+    height: scale(80),
     marginBottom: Spacing.md,
     tintColor: Colors.textWhite,
   },

@@ -3,6 +3,12 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Colors } from "@/src/config/theme";
+import {
+  scale,
+  scaleFontSize,
+  scaleSpacing,
+  getResponsiveButtonSize,
+} from "@/src/utils/responsive";
 
 export default function CommunityHomeScreen() {
   const router = useRouter();
@@ -36,10 +42,10 @@ export default function CommunityHomeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.logoContainer}>
-          <Ionicons name="medical" size={32} color="#FFFFFF" />
+          <Ionicons name="medical" size={scale(32)} color="#FFFFFF" />
         </View>
         <View style={styles.headerRight}>
-          <Ionicons name="notifications-outline" size={28} color="#FFFFFF" />
+          <Ionicons name="notifications-outline" size={scale(28)} color="#FFFFFF" />
         </View>
       </View>
 
@@ -62,13 +68,15 @@ export default function CommunityHomeScreen() {
 
         {/* Illustration */}
         <View style={styles.illustrationContainer}>
-          <Ionicons name="medkit" size={80} color="#FFFFFF" />
+          <Ionicons name="medkit" size={scale(80)} color="#FFFFFF" />
           <Text style={styles.illustrationText}>Emergency Services</Text>
         </View>
       </View>
     </View>
   );
 }
+
+const sosButtonSize = getResponsiveButtonSize(280);
 
 const styles = StyleSheet.create({
   container: {
@@ -79,43 +87,43 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingTop: scaleSpacing(60),
+    paddingHorizontal: scaleSpacing(20),
+    paddingBottom: scaleSpacing(20),
   },
   logoContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: scale(50),
+    height: scale(50),
+    borderRadius: scale(25),
     backgroundColor: "rgba(255, 255, 255, 0.2)",
     justifyContent: "center",
     alignItems: "center",
   },
   headerRight: {
     flexDirection: "row",
-    gap: 15,
+    gap: scaleSpacing(15),
   },
   content: {
     flex: 1,
     alignItems: "center",
-    paddingTop: 40,
+    paddingTop: scaleSpacing(40),
   },
   title: {
-    fontSize: 40,
+    fontSize: scaleFontSize(40),
     fontWeight: "900",
     color: "#FFFFFF",
     textAlign: "center",
     letterSpacing: 2,
-    marginBottom: 40,
+    marginBottom: scaleSpacing(40),
     textShadowColor: "rgba(0, 0, 0, 0.3)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
   sosContainer: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 30,
-    marginHorizontal: 20,
+    borderRadius: scale(20),
+    padding: scaleSpacing(30),
+    marginHorizontal: scaleSpacing(20),
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -123,18 +131,18 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   sosButton: {
-    width: 280,
-    height: 280,
-    borderRadius: 140,
+    width: sosButtonSize,
+    height: sosButtonSize,
+    borderRadius: sosButtonSize / 2,
     backgroundColor: "#DC143C", // Crimson red
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#DC143C",
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: scale(8) },
     shadowOpacity: 0.4,
-    shadowRadius: 16,
+    shadowRadius: scale(16),
     elevation: 12,
-    borderWidth: 8,
+    borderWidth: scale(8),
     borderColor: "#FFFFFF",
   },
   sosButtonPressed: {
@@ -142,31 +150,31 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.95 }],
   },
   sosText: {
-    fontSize: 80,
+    fontSize: scaleFontSize(80),
     fontWeight: "900",
     color: "rgba(255, 255, 255, 0.9)",
-    letterSpacing: 20,
+    letterSpacing: scale(20),
     textShadowColor: "rgba(0, 0, 0, 0.3)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
   pressText: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontWeight: "700",
     color: "rgba(139, 0, 0, 0.8)",
     letterSpacing: 2,
-    marginTop: 10,
+    marginTop: scaleSpacing(10),
   },
   illustrationContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 40,
+    marginTop: scaleSpacing(40),
   },
   illustrationText: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     color: "#FFFFFF",
-    marginTop: 12,
+    marginTop: scaleSpacing(12),
     fontWeight: "600",
   },
 });

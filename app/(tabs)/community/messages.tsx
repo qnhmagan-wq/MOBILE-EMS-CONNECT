@@ -82,68 +82,79 @@ export default function MessagesScreen() {
     );
   }
 
+  // Get most recent incident for navigation
+  const mostRecentIncident = activeIncidents.length > 0
+    ? activeIncidents.reduce((prev, current) =>
+        new Date(current.created_at) > new Date(prev.created_at) ? current : prev
+      )
+    : null;
+
+  // Calculate total unread count (this would need proper implementation with actual unread counts)
+  const hasActiveIncidents = activeIncidents.length > 0;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Messages</Text>
-        <Text style={styles.subtitle}>Chat with responders and admins</Text>
+        <Text style={styles.subtitle}>Emergency support and assistance</Text>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-        {activeIncidents.length === 0 ? (
+        {!hasActiveIncidents ? (
           <View style={styles.emptyState}>
             <Ionicons name="chatbubbles-outline" size={64} color={Colors.textSecondary} />
             <Text style={styles.emptyTitle}>No active conversations</Text>
             <Text style={styles.emptyText}>
-              Messages will appear here when you have active incidents
+              Messages will appear here when you have active emergencies
             </Text>
           </View>
         ) : (
-          activeIncidents.map((incident) => (
-            <TouchableOpacity
-              key={incident.id}
-              style={styles.conversationCard}
-              onPress={() => router.push(`/(tabs)/community/chat?id=${incident.id}`)}
-            >
-              <View style={styles.iconContainer}>
-                <Ionicons
-                  name={getIncidentIcon(incident.type) as any}
-                  size={28}
-                  color={Colors.primary}
-                />
+          <TouchableOpacity
+            style={styles.conversationCard}
+            onPress={() => mostRecentIncident && router.push(`/(tabs)/community/chat?id=${mostRecentIncident.id}`)}
+          >
+            <View style={styles.iconContainer}>
+              <Ionicons
+                name="shield-checkmark"
+                size={32}
+                color={Colors.primary}
+              />
+            </View>
+
+            <View style={styles.conversationContent}>
+              <View style={styles.conversationHeader}>
+                <Text style={styles.conversationTitle}>
+                  Emergency Support Center
+                </Text>
+                <Text style={styles.conversationTime}>
+                  {mostRecentIncident && formatDate(mostRecentIncident.created_at)}
+                </Text>
               </View>
 
-              <View style={styles.conversationContent}>
-                <View style={styles.conversationHeader}>
-                  <Text style={styles.conversationTitle} numberOfLines={1}>
-                    {incident.type.charAt(0).toUpperCase() + incident.type.slice(1)} Emergency
-                  </Text>
-                  <Text style={styles.conversationTime}>
-                    {formatDate(incident.created_at)}
-                  </Text>
-                </View>
-
-                <View style={styles.conversationFooter}>
-                  <Text style={styles.conversationPreview} numberOfLines={1}>
-                    {incident.description}
-                  </Text>
-                  <StatusBadge status={incident.status} size="small" />
-                </View>
-
-                <View style={styles.conversationMeta}>
-                  <Ionicons name="location" size={14} color={Colors.textSecondary} />
-                  <Text style={styles.locationText} numberOfLines={1}>
-                    {incident.address}
-                  </Text>
-                </View>
+              <View style={styles.conversationFooter}>
+                <Text style={styles.conversationPreview} numberOfLines={1}>
+                  {activeIncidents.length === 1
+                    ? `${activeIncidents[0].type.charAt(0).toUpperCase() + activeIncidents[0].type.slice(1)} emergency - ${activeIncidents[0].description}`
+                    : `${activeIncidents.length} active emergencies`}
+                </Text>
+                {mostRecentIncident && (
+                  <StatusBadge status={mostRecentIncident.status} size="small" />
+                )}
               </View>
 
-              <View style={styles.badgeContainer}>
-                <UnreadBadge incidentId={incident.id} size="medium" />
-                <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+              <View style={styles.conversationMeta}>
+                <Ionicons name="chatbubble-ellipses" size={14} color={Colors.textSecondary} />
+                <Text style={styles.locationText}>
+                  Tap to chat with responders and admin
+                </Text>
               </View>
-            </TouchableOpacity>
-          ))
+            </View>
+
+            <View style={styles.badgeContainer}>
+              {mostRecentIncident && <UnreadBadge incidentId={mostRecentIncident.id} size="medium" />}
+              <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+            </View>
+          </TouchableOpacity>
         )}
       </ScrollView>
     </SafeAreaView>
