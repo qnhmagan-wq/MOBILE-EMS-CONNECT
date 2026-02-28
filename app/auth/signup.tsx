@@ -94,7 +94,7 @@ export default function SignupScreen() {
       hasError = true;
     }
 
-    // Validate last name
+    // Validate Last name
     if (!lastName.trim()) {
       newErrors.last_name = "Last name is required";
       hasError = true;
@@ -282,10 +282,10 @@ export default function SignupScreen() {
           <View style={styles.form}>
             <View style={styles.row}>
               <View style={[styles.inputGroup, styles.halfWidth]}>
-                <Text style={styles.label}>last name</Text>
+                <Text style={styles.label}>Last name</Text>
                 <TextInput
                   style={[styles.input, errors.last_name ? styles.inputError : null]}
-                  placeholder="Enter last name"
+                  placeholder="Enter Last name"
                   placeholderTextColor="#999"
                   value={lastName}
                   onChangeText={setLastName}
@@ -298,10 +298,10 @@ export default function SignupScreen() {
               </View>
 
               <View style={[styles.inputGroup, styles.halfWidth]}>
-                <Text style={styles.label}>first name</Text>
+                <Text style={styles.label}>First name</Text>
                 <TextInput
                   style={[styles.input, errors.first_name ? styles.inputError : null]}
-                  placeholder="Enter first name"
+                  placeholder="Enter First name"
                   placeholderTextColor="#999"
                   value={firstName}
                   onChangeText={setFirstName}
@@ -383,7 +383,7 @@ export default function SignupScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>confirm password</Text>
+              <Text style={styles.label}>Confirm password</Text>
               <TextInput
                 style={[
                   styles.input,
@@ -429,11 +429,6 @@ export default function SignupScreen() {
               >
                 <Text style={styles.footerLink}>Sign In</Text>
               </TouchableOpacity>
-            </View>
-
-            {/* Debug info - visible on screen */}
-            <View style={styles.debugContainer}>
-              <Text style={styles.debugText}>API: {debugInfo || 'Loading...'}</Text>
             </View>
           </View>
         </View>

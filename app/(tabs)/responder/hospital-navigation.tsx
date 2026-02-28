@@ -182,8 +182,8 @@ export default function HospitalNavigationScreen() {
 
     if (Platform.OS === 'ios') {
       Linking.openURL(
-        `http://maps.apple.com/?daddr=${latitude},${longitude}&dirflg=d`
-      );
+  `http://maps.apple.com/?daddr=${latitude},${longitude}&dirflg=d`
+);
     } else {
       Linking.openURL(
         `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=driving`

@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
     fontSize: scaleFontSize(80),
     fontWeight: "900",
     color: "rgba(255, 255, 255, 0.9)",
-    letterSpacing: scale(20),
+    letterSpacing: scale(8),
     textShadowColor: "rgba(0, 0, 0, 0.3)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   pressText: {
     fontSize: scaleFontSize(14),
     fontWeight: "700",
-    color: "rgba(139, 0, 0, 0.8)",
+    color: "rgba(0, 0, 0, 0.8)",
     letterSpacing: 2,
     marginTop: scaleSpacing(10),
   },

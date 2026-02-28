@@ -54,7 +54,7 @@ export default function ResponderEditProfileScreen() {
   const handleSave = async () => {
     // Validate required fields
     if (!firstName.trim() || !lastName.trim()) {
-      Alert.alert("Validation Error", "First name and last name are required.");
+      Alert.alert("Validation Error", "First name and Last name are required.");
       return;
     }
 
@@ -126,7 +126,7 @@ export default function ResponderEditProfileScreen() {
               style={styles.input}
               value={firstName}
               onChangeText={setFirstName}
-              placeholder="Enter first name"
+              placeholder="Enter First name"
               placeholderTextColor={Colors.textLight}
               autoCapitalize="words"
             />
@@ -142,7 +142,7 @@ export default function ResponderEditProfileScreen() {
               style={styles.input}
               value={lastName}
               onChangeText={setLastName}
-              placeholder="Enter last name"
+              placeholder="Enter Last Name"
               placeholderTextColor={Colors.textLight}
               autoCapitalize="words"
             />

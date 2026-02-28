@@ -1,9 +1,3 @@
-/**
- * First Aid Detail Screen
- *
- * Displays comprehensive first aid instructions for specific emergency types
- */
-
 import React from "react";
 import {
   View,
@@ -40,7 +34,7 @@ const FIRST_AID_DATA: { [key: string]: FirstAidContent } = {
       {
         number: 2,
         title: 'Call for Emergency Help',
-        details: 'Call 911 or local emergency number. If someone is nearby, have them call while you start CPR.',
+        details: 'Call Emergency or local emergency number. If someone is nearby, have them call while you start CPR.',
       },
       {
         number: 3,
@@ -138,7 +132,7 @@ const FIRST_AID_DATA: { [key: string]: FirstAidContent } = {
       'Do NOT perform on someone who can cough or speak',
       'For pregnant/obese individuals: use chest thrusts instead',
       'For infants: use back blows and chest thrusts (different technique)',
-      'Call 911 if object doesn\'t come out after several attempts',
+      'Call Emergency if object doesn\'t come out after several attempts',
     ],
   },
   bleeding: {
@@ -161,7 +155,7 @@ const FIRST_AID_DATA: { [key: string]: FirstAidContent } = {
       },
       {
         number: 2,
-        title: 'Call 911 Immediately',
+        title: 'Call Emergency Immediately',
         details: 'For severe bleeding, call emergency services right away. Begin treatment while help is coming.',
       },
       {
@@ -223,7 +217,7 @@ const FIRST_AID_DATA: { [key: string]: FirstAidContent } = {
       {
         number: 2,
         title: 'Assess Burn Severity',
-        details: '1st degree: Red, painful. 2nd degree: Blisters, severe pain. 3rd degree: White/charred, may not hurt (nerve damage). Call 911 for 2nd/3rd degree.',
+        details: '1st degree: Red, painful. 2nd degree: Blisters, severe pain. 3rd degree: White/charred, may not hurt (nerve damage). Call Emergency for 2nd/3rd degree.',
       },
       {
         number: 3,
@@ -284,7 +278,7 @@ const FIRST_AID_DATA: { [key: string]: FirstAidContent } = {
       {
         number: 2,
         title: 'Call Emergency Services',
-        details: 'For severe fractures, compound fractures (bone through skin), or spine injuries, call 911 immediately.',
+        details: 'For severe fractures, compound fractures (bone through skin), or spine injuries, Call Emergency immediately.',
       },
       {
         number: 3,
@@ -382,7 +376,7 @@ const FIRST_AID_DATA: { [key: string]: FirstAidContent } = {
       'Do NOT put anything in person\'s mouth',
       'Do NOT restrain person or try to stop movements',
       'Do NOT give water, food, or medication until fully conscious',
-      'Call 911 if: seizure lasts >5 minutes, multiple seizures, person is injured, pregnant, or first-time seizure',
+      'Call Emergency if: seizure lasts >5 minutes, multiple seizures, person is injured, pregnant, or first-time seizure',
     ],
   },
 };
@@ -489,10 +483,12 @@ export default function FirstAidDetailScreen() {
         </View>
 
         {/* Emergency Call Button */}
-        <TouchableOpacity style={styles.emergencyButton}>
-          <Ionicons name="call" size={24} color={Colors.textWhite} />
-          <Text style={styles.emergencyButtonText}>Call Emergency: 911</Text>
-        </TouchableOpacity>
+        <TouchableOpacity 
+  style={styles.emergencyButton}
+  onPress={() => router.push('/(tabs)/community/emergency-call')}>
+  <Ionicons name="call" size={24} color={Colors.textWhite} />
+  <Text style={styles.emergencyButtonText}>Call Emergency</Text>
+</TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );

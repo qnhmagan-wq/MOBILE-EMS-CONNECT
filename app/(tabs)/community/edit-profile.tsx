@@ -136,7 +136,7 @@ export default function CommunityEditProfileScreen() {
               style={styles.input}
               value={firstName}
               onChangeText={setFirstName}
-              placeholder="Enter first name"
+              placeholder="Enter First name"
               placeholderTextColor={Colors.textLight}
               autoCapitalize="words"
             />
@@ -152,7 +152,7 @@ export default function CommunityEditProfileScreen() {
               style={styles.input}
               value={lastName}
               onChangeText={setLastName}
-              placeholder="Enter last name"
+              placeholder="Enter Last name"
               placeholderTextColor={Colors.textLight}
               autoCapitalize="words"
             />

@@ -36,11 +36,6 @@ export default function LoginScreen() {
       
       // Delay alert slightly to ensure screen is mounted
       setTimeout(() => {
-        Alert.alert(
-          "🔍 Debug Info",
-          `API URL: ${apiUrl}\n\nThis is for testing. The app will connect to this URL.`,
-          [{ text: "OK" }]
-        );
       }, 500);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -212,11 +207,6 @@ export default function LoginScreen() {
               >
                 <Text style={styles.footerLink}>Sign Up</Text>
               </TouchableOpacity>
-            </View>
-
-            {/* Debug info - visible on screen */}
-            <View style={styles.debugContainer}>
-              <Text style={styles.debugText}>API: {debugInfo || 'Loading...'}</Text>
             </View>
           </View>
         </View>
