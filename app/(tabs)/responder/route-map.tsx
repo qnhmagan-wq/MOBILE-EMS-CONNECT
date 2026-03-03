@@ -381,11 +381,8 @@ export default function RouteMapScreen() {
             title="Incident Location"
             description={incident.address}
             pinColor={Colors.danger}
-          >
-            <View style={styles.incidentMarker}>
-              <Ionicons name="alert-circle" size={32} color="#fff" />
-            </View>
-          </Marker>
+            tracksViewChanges={false}
+          />
 
           {/* Route Polyline - Google Directions API (memoized to prevent re-renders) */}
           {memoizedRouteCoordinates.length > 0 && (
@@ -552,16 +549,6 @@ const styles = StyleSheet.create({
     color: Colors.textWhite,
     fontSize: FontSizes.md,
     fontWeight: '600',
-  },
-  incidentMarker: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: Colors.danger,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
   },
   infoPanel: {
     position: 'absolute',

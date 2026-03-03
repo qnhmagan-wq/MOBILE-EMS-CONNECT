@@ -8,9 +8,9 @@
  * - Real-time location updates every 5 seconds or 10 meters
  */
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { View, StyleSheet, SafeAreaView, Text, ActivityIndicator } from "react-native";
-import MapView, { PROVIDER_GOOGLE, Marker, Callout, Region } from "react-native-maps";
+import MapView, { PROVIDER_GOOGLE, Marker, Region } from "react-native-maps";
 import * as Location from "expo-location";
 import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,26 +27,6 @@ export default function MapOverviewScreen() {
 
   const mapRef = useRef<MapView>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
-
-  /**
-   * Get incident icon based on type
-   */
-  const getIncidentIcon = useCallback((type: string): any => {
-    switch (type) {
-      case 'medical':
-        return 'medical';
-      case 'fire':
-        return 'flame';
-      case 'accident':
-        return 'car';
-      case 'crime':
-        return 'shield';
-      case 'natural_disaster':
-        return 'warning';
-      default:
-        return 'alert-circle';
-    }
-  }, []);
 
   /**
    * Setup location tracking on mount
@@ -183,32 +163,11 @@ export default function MapOverviewScreen() {
                 latitude: dispatch.incident.latitude,
                 longitude: dispatch.incident.longitude,
               }}
-            >
-              <View style={styles.incidentMarker}>
-                <Ionicons
-                  name={getIncidentIcon(dispatch.incident.type)}
-                  size={28}
-                  color="#fff"
-                />
-              </View>
-
-              <Callout>
-                <View style={styles.calloutContainer}>
-                  <Text style={styles.calloutTitle}>
-                    {dispatch.incident.type.charAt(0).toUpperCase() + dispatch.incident.type.slice(1).replace('_', ' ')} Emergency
-                  </Text>
-                  <Text style={styles.calloutAddress} numberOfLines={2}>
-                    {dispatch.incident.address}
-                  </Text>
-                  <View style={styles.calloutStatusRow}>
-                    <Text style={styles.calloutStatusLabel}>Status:</Text>
-                    <Text style={[styles.calloutStatus, { color: getStatusColor(dispatch.status) }]}>
-                      {dispatch.status.toUpperCase().replace('_', ' ')}
-                    </Text>
-                  </View>
-                </View>
-              </Callout>
-            </Marker>
+              pinColor={Colors.danger}
+              title={`${dispatch.incident.type.charAt(0).toUpperCase() + dispatch.incident.type.slice(1).replace('_', ' ')} Emergency`}
+              description={`${dispatch.incident.address}\nStatus: ${dispatch.status.toUpperCase().replace('_', ' ')}`}
+              tracksViewChanges={false}
+            />
           ))}
         </MapView>
 
@@ -229,26 +188,6 @@ export default function MapOverviewScreen() {
       </SafeAreaView>
     </ErrorBoundary>
   );
-}
-
-/**
- * Get status color for callout
- */
-function getStatusColor(status: string): string {
-  switch (status) {
-    case 'assigned':
-      return '#EF4444'; // Red
-    case 'accepted':
-      return '#3B82F6'; // Blue
-    case 'en_route':
-      return '#F59E0B'; // Orange
-    case 'arrived':
-      return '#8B5CF6'; // Purple
-    case 'completed':
-      return '#10B981'; // Green
-    default:
-      return '#6B7280'; // Gray
-  }
 }
 
 const styles = StyleSheet.create({
@@ -288,21 +227,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
   },
-  incidentMarker: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: Colors.danger,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
   infoPanel: {
     position: 'absolute',
     top: 60,
@@ -332,34 +256,5 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: Spacing.xs,
     fontStyle: 'italic',
-  },
-  calloutContainer: {
-    width: 220,
-    padding: Spacing.sm,
-  },
-  calloutTitle: {
-    fontSize: FontSizes.md,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-    marginBottom: Spacing.xs,
-  },
-  calloutAddress: {
-    fontSize: FontSizes.sm,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.xs,
-  },
-  calloutStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  calloutStatusLabel: {
-    fontSize: FontSizes.sm,
-    color: Colors.textSecondary,
-    fontWeight: '500',
-  },
-  calloutStatus: {
-    fontSize: FontSizes.sm,
-    fontWeight: '600',
   },
 });

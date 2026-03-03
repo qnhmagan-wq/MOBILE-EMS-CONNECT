@@ -99,7 +99,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         console.log('📍 [DispatchContext] Location update response:', response);
 
         // **FIX #4: Confirm backend received the location**
-        if (response.message === 'Location updated successfully') {
+        if (response.message?.toLowerCase().includes('location updated') || response.location) {
           setLocationLastSent(new Date());
           setIsBackendConfirmed(true);
         }
@@ -255,7 +255,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const currentLocation = await locationService.getCurrentLocation();
 
         if (currentLocation) {
-          await dispatchService.updateLocation({
+          const response = await dispatchService.updateLocation({
             latitude: currentLocation.coords.latitude,
             longitude: currentLocation.coords.longitude,
           });
@@ -263,6 +263,9 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             lat: currentLocation.coords.latitude,
             lng: currentLocation.coords.longitude,
           });
+          // FIX: Set backend confirmed on initial successful update
+          setLocationLastSent(new Date());
+          setIsBackendConfirmed(true);
         }
       } catch (error) {
         console.error('[DispatchContext] Failed to send initial location:', error);
@@ -369,6 +372,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         console.log('[DispatchContext] Background tracking already active');
         setIsTrackingActive(true);
         startPolling();
+        startPeriodicLocationUpdates();
       } else {
         console.log('[DispatchContext] Starting auto-start sequence...');
         autoStartTracking();
@@ -381,7 +385,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // **FIX #2: Cleanup foreground location updates**
       stopPeriodicLocationUpdates();
     };
-  }, [user, autoStartTracking, startPolling, stopPolling, stopPeriodicLocationUpdates, stopTracking]);
+  }, [user, autoStartTracking, startPolling, startPeriodicLocationUpdates, stopPolling, stopPeriodicLocationUpdates, stopTracking]);
 
   /**
    * Sync error from polling hook

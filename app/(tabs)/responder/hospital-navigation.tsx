@@ -286,11 +286,8 @@ export default function HospitalNavigationScreen() {
             coordinate={currentLocation}
             title="Your Location"
             pinColor="#3B82F6"
-          >
-            <View style={styles.currentLocationMarker}>
-              <Ionicons name="navigate" size={20} color="#FFFFFF" />
-            </View>
-          </Marker>
+            tracksViewChanges={false}
+          />
         )}
 
         {/* Hospital Marker */}
@@ -301,11 +298,9 @@ export default function HospitalNavigationScreen() {
           }}
           title={hospitalRoute.hospital.name}
           description={hospitalRoute.hospital.address}
-        >
-          <View style={styles.hospitalMarker}>
-            <Ionicons name="medical" size={24} color="#FFFFFF" />
-          </View>
-        </Marker>
+          pinColor="#EF4444"
+          tracksViewChanges={false}
+        />
 
         {/* Route Polyline */}
         <Polyline
@@ -431,36 +426,6 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
-  },
-  currentLocationMarker: {
-    width: scale(40),
-    height: scale(40),
-    borderRadius: scale(20),
-    backgroundColor: "#3B82F6",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  hospitalMarker: {
-    width: scale(50),
-    height: scale(50),
-    borderRadius: scale(25),
-    backgroundColor: "#EF4444",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
   },
   infoCard: {
     position: "absolute",

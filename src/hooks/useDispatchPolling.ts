@@ -33,15 +33,23 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastSeenDispatchIds = useRef<Set<number>>(new Set());
+  const isPollingRef = useRef(false);
 
   /**
    * Fetch dispatches from API
    */
   const refreshDispatches = useCallback(async () => {
     try {
+      console.log('[useDispatchPolling] Fetching dispatches...');
       const response = await dispatchService.getDispatches();
       const fetchedDispatches = response.dispatches || [];
       const fetchedNearby = response.nearby_incidents || [];
+
+      console.log('[useDispatchPolling] Received:', {
+        dispatches: fetchedDispatches.length,
+        nearby: fetchedNearby.length,
+        ids: fetchedDispatches.map((d) => d.id),
+      });
 
       // Detect new dispatches (not seen before)
       const newDispatches = fetchedDispatches.filter(
@@ -67,14 +75,16 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
 
   /**
    * Start polling for dispatches
+   * Uses isPollingRef to avoid stale closure issues
    */
   const startPolling = useCallback(() => {
-    if (isPolling) {
+    if (isPollingRef.current) {
       console.log('[useDispatchPolling] Already polling');
       return;
     }
 
     console.log('[useDispatchPolling] Starting dispatch polling');
+    isPollingRef.current = true;
     setIsPolling(true);
 
     // Initial fetch
@@ -84,18 +94,19 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
     intervalRef.current = setInterval(() => {
       refreshDispatches();
     }, POLL_INTERVAL);
-  }, [isPolling, refreshDispatches]);
+  }, [refreshDispatches]);
 
   /**
    * Stop polling
    */
   const stopPolling = useCallback(() => {
-    if (!isPolling) {
+    if (!isPollingRef.current) {
       console.log('[useDispatchPolling] Not currently polling');
       return;
     }
 
     console.log('[useDispatchPolling] Stopping dispatch polling');
+    isPollingRef.current = false;
     setIsPolling(false);
 
     if (intervalRef.current) {
@@ -106,7 +117,7 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
     // Clear dispatches and last seen IDs
     setDispatches([]);
     lastSeenDispatchIds.current.clear();
-  }, [isPolling]);
+  }, []);
 
   /**
    * Update dispatch status

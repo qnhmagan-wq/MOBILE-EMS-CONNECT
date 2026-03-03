@@ -60,12 +60,6 @@
     "plugins": [
       "expo-router",
       [
-        "react-native-maps",
-        {
-          "googleMapsApiKey": "AIzaSyBj6h2T76SNzaONbY8rTdzf9eaHrZkMrCs"
-        }
-      ],
-      [
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Allow EMS Connect to access your location for emergency reporting."
