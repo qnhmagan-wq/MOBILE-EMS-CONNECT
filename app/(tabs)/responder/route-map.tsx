@@ -25,7 +25,8 @@ import {
   Linking,
   ScrollView,
 } from "react-native";
-import MapView, { PROVIDER_GOOGLE, Marker, Polyline } from "react-native-maps";
+import { PROVIDER_GOOGLE, Marker, Polyline } from "react-native-maps";
+import DeferredMapView from "@/components/DeferredMapView";
 import * as Location from "expo-location";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useDispatch } from "@/src/contexts/DispatchContext";
@@ -360,7 +361,7 @@ export default function RouteMapScreen() {
   return (
     <ErrorBoundary>
       <SafeAreaView style={styles.container}>
-        <MapView
+        <DeferredMapView
           provider={PROVIDER_GOOGLE}
           style={styles.map}
           initialRegion={{
@@ -393,7 +394,7 @@ export default function RouteMapScreen() {
               lineDashPattern={[1]}
             />
           )}
-        </MapView>
+        </DeferredMapView>
 
         {/* Incident Info Panel */}
         <View style={styles.infoPanel}>

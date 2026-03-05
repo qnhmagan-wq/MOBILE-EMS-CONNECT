@@ -10,7 +10,8 @@ import {
   Linking,
   Alert,
 } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import { Marker, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import DeferredMapView from '@/components/DeferredMapView';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useIncidentTracking } from '@/src/hooks/useIncidentTracking';
@@ -39,7 +40,7 @@ export default function MapsScreen() {
     refreshTracking,
   } = useIncidentTracking();
 
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<import("react-native-maps").default>(null);
 
   /**
    * Fetch user's active incidents on mount
@@ -257,7 +258,7 @@ export default function MapsScreen() {
       </View>
 
       {/* Map */}
-      <MapView
+      <DeferredMapView
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={styles.map}
@@ -334,7 +335,7 @@ export default function MapsScreen() {
               </Marker>
             ) : null
           )}
-      </MapView>
+      </DeferredMapView>
 
       {/* Polling Indicator */}
       {isPolling && (

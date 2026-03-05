@@ -98,11 +98,9 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         console.log('📍 [DispatchContext] Location update response:', response);
 
-        // **FIX #4: Confirm backend received the location**
-        if (response.message?.toLowerCase().includes('location updated') || response.location) {
-          setLocationLastSent(new Date());
-          setIsBackendConfirmed(true);
-        }
+        // Any successful response means the backend received the location
+        setLocationLastSent(new Date());
+        setIsBackendConfirmed(true);
       }
     } catch (error: any) {
       const statusCode = error.response?.status;

@@ -11,7 +11,8 @@ import {
   Platform,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import DeferredMapView from "@/components/DeferredMapView";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
@@ -34,7 +35,7 @@ export default function HospitalNavigationScreen() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCompleting, setIsCompleting] = useState(false);
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<import("react-native-maps").default>(null);
   const locationWatchId = useRef<Location.LocationSubscription | null>(null);
 
   // Load dispatch and hospital route
@@ -267,7 +268,7 @@ export default function HospitalNavigationScreen() {
       </View>
 
       {/* Map View */}
-      <MapView
+      <DeferredMapView
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={styles.map}
@@ -310,7 +311,7 @@ export default function HospitalNavigationScreen() {
           lineCap="round"
           lineJoin="round"
         />
-      </MapView>
+      </DeferredMapView>
 
       {/* Hospital Info Card */}
       <View style={styles.infoCard}>

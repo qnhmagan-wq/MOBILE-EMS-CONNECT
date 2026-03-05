@@ -50,6 +50,12 @@ export default function ResponderLayout() {
         }}
       />
       <Tabs.Screen
+        name="hospital-navigation"
+        options={{
+          href: null, // Hidden from tab bar - accessed programmatically
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",

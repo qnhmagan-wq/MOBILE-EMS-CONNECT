@@ -10,7 +10,8 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { View, StyleSheet, SafeAreaView, Text, ActivityIndicator } from "react-native";
-import MapView, { PROVIDER_GOOGLE, Marker, Region } from "react-native-maps";
+import { PROVIDER_GOOGLE, Marker, Region } from "react-native-maps";
+import DeferredMapView from "@/components/DeferredMapView";
 import * as Location from "expo-location";
 import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,7 +26,7 @@ export default function MapOverviewScreen() {
   const [error, setError] = useState<string | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
 
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<import("react-native-maps").default>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
 
   /**
@@ -140,7 +141,7 @@ export default function MapOverviewScreen() {
   return (
     <ErrorBoundary>
       <SafeAreaView style={styles.container}>
-        <MapView
+        <DeferredMapView
           ref={mapRef}
           provider={PROVIDER_GOOGLE}
           style={styles.map}
@@ -169,7 +170,7 @@ export default function MapOverviewScreen() {
               tracksViewChanges={false}
             />
           ))}
-        </MapView>
+        </DeferredMapView>
 
         {/* Info Panel - Shows incident count */}
         <View style={styles.infoPanel}>
