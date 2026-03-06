@@ -34,6 +34,7 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastSeenDispatchIds = useRef<Set<number>>(new Set());
   const isPollingRef = useRef(false);
+  const consecutiveFailuresRef = useRef<number>(0);
 
   /**
    * Fetch dispatches from API
@@ -67,9 +68,28 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
       setDispatches(fetchedDispatches);
       setNearbyIncidents(fetchedNearby);
       setError(null);
+      consecutiveFailuresRef.current = 0;
     } catch (err: any) {
-      console.error('[useDispatchPolling] Refresh error:', err);
-      setError('Failed to load dispatches. Please check your connection.');
+      consecutiveFailuresRef.current += 1;
+      const statusCode = err.response?.status;
+
+      console.error('[useDispatchPolling] Refresh error:', {
+        attempt: consecutiveFailuresRef.current,
+        status: statusCode,
+        message: err.message,
+      });
+
+      // 401 handled by API interceptor (clears auth) - don't show error
+      if (statusCode === 401) return;
+
+      // Only show error after 3+ consecutive failures (absorbs transient init errors)
+      if (consecutiveFailuresRef.current >= 3) {
+        if (!err.response) {
+          setError('Network connection lost. Please check your internet connection.');
+        } else {
+          setError('Failed to load dispatches. Please check your connection.');
+        }
+      }
     }
   }, []);
 

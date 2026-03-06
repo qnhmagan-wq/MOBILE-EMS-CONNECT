@@ -365,17 +365,33 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     console.log('[DispatchContext] Responder detected, checking auto-start...');
 
     // Check if already tracking
-    isBackgroundTrackingActive().then((isActive) => {
+    (async () => {
+      const isActive = await isBackgroundTrackingActive();
       if (isActive) {
-        console.log('[DispatchContext] Background tracking already active');
+        console.log('[DispatchContext] Background tracking already active, resuming...');
         setIsTrackingActive(true);
+
+        // Re-confirm duty status before polling (backend may have lost state)
+        try {
+          await dispatchService.updateDutyStatus({
+            is_on_duty: true,
+            responder_status: 'idle',
+          });
+          console.log('[DispatchContext] Duty status re-confirmed');
+        } catch (e: any) {
+          console.error('[DispatchContext] Failed to re-confirm duty status:', e.message);
+        }
+
+        // Send immediate location to set isBackendConfirmed = true
+        await sendLocationUpdate();
+
         startPolling();
         startPeriodicLocationUpdates();
       } else {
         console.log('[DispatchContext] Starting auto-start sequence...');
         autoStartTracking();
       }
-    });
+    })();
 
     // Cleanup on unmount
     return () => {
@@ -383,7 +399,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // **FIX #2: Cleanup foreground location updates**
       stopPeriodicLocationUpdates();
     };
-  }, [user, autoStartTracking, startPolling, startPeriodicLocationUpdates, stopPolling, stopPeriodicLocationUpdates, stopTracking]);
+  }, [user, autoStartTracking, sendLocationUpdate, startPolling, startPeriodicLocationUpdates, stopPolling, stopPeriodicLocationUpdates, stopTracking]);
 
   /**
    * Sync error from polling hook
