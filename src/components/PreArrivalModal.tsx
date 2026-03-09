@@ -209,31 +209,33 @@ const PatientFormCard: React.FC<PatientFormCardProps> = ({
 
         {showIncidentTypePicker && (
           <View style={styles.suggestionsContainer}>
-            {INCIDENT_TYPE_SUGGESTIONS.map((type) => (
-              <TouchableOpacity
-                key={type}
-                style={[
-                  styles.suggestionItem,
-                  patient.incident_type === type && styles.suggestionItemSelected
-                ]}
-                onPress={() => handleIncidentTypeSelect(type)}
-              >
-                <Text style={[
-                  styles.suggestionText,
-                  patient.incident_type === type && styles.suggestionTextSelected
-                ]}>
-                  {type}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            <TextInput
-              style={styles.customInput}
-              value={patient.incident_type}
-              onChangeText={(val) => onUpdate('incident_type', val)}
-              placeholder="Or type custom..."
-              placeholderTextColor={Colors.textLight}
-              editable={!isSubmitting}
-            />
+            <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
+              {INCIDENT_TYPE_SUGGESTIONS.map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.suggestionItem,
+                    patient.incident_type === type && styles.suggestionItemSelected
+                  ]}
+                  onPress={() => handleIncidentTypeSelect(type)}
+                >
+                  <Text style={[
+                    styles.suggestionText,
+                    patient.incident_type === type && styles.suggestionTextSelected
+                  ]}>
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <TextInput
+                style={styles.customInput}
+                value={patient.incident_type}
+                onChangeText={(val) => onUpdate('incident_type', val)}
+                placeholder="Or type custom..."
+                placeholderTextColor={Colors.textLight}
+                editable={!isSubmitting}
+              />
+            </ScrollView>
           </View>
         )}
       </View>
@@ -834,6 +836,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     marginTop: scaleSpacing(Spacing.sm),
     maxHeight: scaleHeight(250),
+    overflow: 'hidden',
   },
   suggestionItem: {
     padding: scaleSpacing(Spacing.md),
