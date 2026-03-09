@@ -1,10 +1,11 @@
-import React from "react";
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, Switch, TouchableOpacity, ActivityIndicator } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, Switch, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { scale, scaleFontSize, scaleSpacing } from "@/src/utils/responsive";
+import { getDispatches } from "@/src/services/dispatch.service";
 
 export default function ResponderHomeScreen() {
   const { user } = useAuth();
@@ -12,11 +13,51 @@ export default function ResponderHomeScreen() {
     isTrackingActive,
     hasLocationPermission,
     locationLastSent,
+    isBackendConfirmed,
+    dutyStatusConfirmed,
+    locationFailureCount,
     isLoading,
     error,
     clearError,
+    retryDispatches,
     activeDispatches,
+    lastPollTime,
+    lastPollResult,
   } = useDispatch();
+
+  const [debugLoading, setDebugLoading] = useState(false);
+
+  const handleDebugFetch = async () => {
+    setDebugLoading(true);
+    try {
+      const response = await getDispatches();
+      const dispatches = response.dispatches || [];
+      const nearby = response.nearby_incidents || [];
+      const rawKeys = (response as any)._rawKeys || 'unknown';
+      const firstId = dispatches.length > 0 ? dispatches[0].id : 'none';
+      const firstStatus = dispatches.length > 0 ? dispatches[0].status : 'n/a';
+
+      Alert.alert(
+        'Debug Fetch Result',
+        `Raw keys: [${rawKeys}]\n` +
+        `Dispatches: ${dispatches.length}\n` +
+        `Nearby: ${nearby.length}\n` +
+        `First dispatch ID: ${firstId}\n` +
+        `First dispatch status: ${firstStatus}\n` +
+        `IDs: [${dispatches.map((d: any) => d.id).join(',')}]\n\n` +
+        `Raw JSON (first 500 chars):\n${JSON.stringify(response).substring(0, 500)}`
+      );
+    } catch (err: any) {
+      Alert.alert(
+        'Debug Fetch Error',
+        `Status: ${err.response?.status || 'network'}\n` +
+        `Message: ${err.response?.data?.message || err.message}\n` +
+        `Data: ${JSON.stringify(err.response?.data || {}).substring(0, 300)}`
+      );
+    } finally {
+      setDebugLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -40,9 +81,14 @@ export default function ResponderHomeScreen() {
               <Text style={styles.errorTitle}>Error</Text>
             </View>
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity style={styles.dismissButton} onPress={clearError}>
-              <Text style={styles.dismissButtonText}>Dismiss</Text>
-            </TouchableOpacity>
+            <View style={styles.errorButtonRow}>
+              <TouchableOpacity style={styles.retryButton} onPress={retryDispatches}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.dismissButton} onPress={clearError}>
+                <Text style={styles.dismissButtonText}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -65,6 +111,44 @@ export default function ResponderHomeScreen() {
             <Text style={styles.lastUpdateText}>
               Last update: {locationLastSent.toLocaleTimeString()}
             </Text>
+          )}
+
+          {/* Backend Status Indicators */}
+          <View style={styles.backendStatusRow}>
+            <View style={styles.backendStatusItem}>
+              <View style={[styles.trackingIndicator, {
+                backgroundColor: dutyStatusConfirmed ? '#10B981' : '#EF4444'
+              }]} />
+              <Text style={styles.backendStatusText}>
+                Duty: {dutyStatusConfirmed ? 'Confirmed' : 'Not Confirmed'}
+              </Text>
+            </View>
+            <View style={styles.backendStatusItem}>
+              <View style={[styles.trackingIndicator, {
+                backgroundColor: isBackendConfirmed ? '#10B981' : (isTrackingActive ? '#F59E0B' : '#EF4444')
+              }]} />
+              <Text style={styles.backendStatusText}>
+                Location: {isBackendConfirmed ? 'Sent' : (isTrackingActive ? 'Sent (Background)' : 'Not Sent')}
+              </Text>
+            </View>
+          </View>
+
+          {!dutyStatusConfirmed && isTrackingActive && (
+            <View style={[styles.permissionWarning, { backgroundColor: '#FEF2F2' }]}>
+              <Ionicons name="alert-circle" size={scale(16)} color="#EF4444" />
+              <Text style={[styles.permissionWarningText, { color: '#991B1B' }]}>
+                Backend has not confirmed on-duty status. Dispatches may not appear. Check console logs for details.
+              </Text>
+            </View>
+          )}
+
+          {locationFailureCount >= 3 && !isTrackingActive && (
+            <View style={[styles.permissionWarning, { backgroundColor: '#FEF2F2' }]}>
+              <Ionicons name="alert-circle" size={scale(16)} color="#EF4444" />
+              <Text style={[styles.permissionWarningText, { color: '#991B1B' }]}>
+                Location updates failing ({locationFailureCount} failures). GPS signal may be weak.
+              </Text>
+            </View>
           )}
 
           {!hasLocationPermission && (
@@ -120,6 +204,36 @@ export default function ResponderHomeScreen() {
             {activeDispatches.length} {activeDispatches.length === 1 ? 'dispatch' : 'dispatches'}
           </Text>
         </View>
+
+        {/* Poll Diagnostics Card */}
+        {isTrackingActive && (
+          <View style={styles.diagnosticsCard}>
+            <View style={styles.diagnosticsHeader}>
+              <Ionicons name="bug" size={scale(18)} color={Colors.textSecondary} />
+              <Text style={styles.diagnosticsTitle}>Poll Diagnostics</Text>
+            </View>
+            <Text style={styles.diagnosticsText}>
+              User ID: {user?.id ?? 'unknown'}
+            </Text>
+            <Text style={styles.diagnosticsText}>
+              Last poll: {lastPollTime ? lastPollTime.toLocaleTimeString() : 'Never'}
+            </Text>
+            <Text style={styles.diagnosticsText} selectable>
+              Result: {lastPollResult || 'Waiting...'}
+            </Text>
+            <TouchableOpacity
+              style={styles.debugFetchButton}
+              onPress={handleDebugFetch}
+              disabled={debugLoading}
+            >
+              {debugLoading ? (
+                <ActivityIndicator size="small" color={Colors.textWhite} />
+              ) : (
+                <Text style={styles.debugFetchButtonText}>Debug Fetch</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Info Card */}
         <View style={styles.infoCard}>
@@ -203,8 +317,23 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
     lineHeight: 20,
   },
+  errorButtonRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: Spacing.sm,
+  },
+  retryButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    backgroundColor: "#10B981",
+    borderRadius: BorderRadius.sm,
+  },
+  retryButtonText: {
+    fontSize: FontSizes.sm,
+    fontWeight: "600",
+    color: Colors.textWhite,
+  },
   dismissButton: {
-    alignSelf: "flex-end",
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
     backgroundColor: "#EF4444",
@@ -254,6 +383,24 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.xs,
     color: Colors.textSecondary,
     marginTop: Spacing.sm,
+  },
+  backendStatusRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  backendStatusItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  backendStatusText: {
+    fontSize: FontSizes.xs,
+    color: Colors.textSecondary,
+    fontWeight: "500",
   },
   permissionWarning: {
     flexDirection: "row",
@@ -328,6 +475,45 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.xxl,
     fontWeight: "bold",
     color: "#F59E0B",
+  },
+  // Diagnostics Card
+  diagnosticsCard: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  diagnosticsHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  diagnosticsTitle: {
+    fontSize: FontSizes.sm,
+    fontWeight: "600" as const,
+    color: Colors.textSecondary,
+  },
+  diagnosticsText: {
+    fontSize: FontSizes.xs,
+    color: Colors.textSecondary,
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  debugFetchButton: {
+    marginTop: Spacing.sm,
+    backgroundColor: '#6B7280',
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    alignSelf: 'flex-start',
+  },
+  debugFetchButtonText: {
+    fontSize: FontSizes.sm,
+    fontWeight: '600' as const,
+    color: Colors.textWhite,
   },
   // Info Card
   infoCard: {

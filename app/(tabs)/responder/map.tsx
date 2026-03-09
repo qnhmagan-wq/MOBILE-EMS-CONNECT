@@ -8,11 +8,12 @@
  * - Real-time location updates every 5 seconds or 10 meters
  */
 
-import React, { useState, useEffect, useRef } from "react";
-import { View, StyleSheet, SafeAreaView, Text, ActivityIndicator } from "react-native";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { View, StyleSheet, SafeAreaView, Text, ActivityIndicator, TouchableOpacity } from "react-native";
 import { PROVIDER_GOOGLE, Marker, Region } from "react-native-maps";
 import DeferredMapView from "@/components/DeferredMapView";
 import * as Location from "expo-location";
+import * as locationService from "@/src/services/location.service";
 import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
@@ -28,86 +29,101 @@ export default function MapOverviewScreen() {
 
   const mapRef = useRef<import("react-native-maps").default>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+  const mountedRef = useRef(true);
+
+  const setLocationFromUpdate = useCallback((update: { latitude: number; longitude: number }) => {
+    const loc = {
+      coords: { latitude: update.latitude, longitude: update.longitude, altitude: null, accuracy: null, altitudeAccuracy: null, heading: null, speed: null },
+      timestamp: Date.now(),
+    } as Location.LocationObject;
+    setLocation(loc);
+    setRegion({
+      latitude: update.latitude,
+      longitude: update.longitude,
+      latitudeDelta: 0.05,
+      longitudeDelta: 0.05,
+    });
+  }, []);
 
   /**
-   * Setup location tracking on mount
+   * Setup location tracking
    */
-  useEffect(() => {
-    let mounted = true;
+  const setupLocationTracking = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
 
-    const setupLocationTracking = async () => {
+    try {
+      console.log('[Map Overview] Requesting location permission...');
+      const permResult = await locationService.requestLocationPermissions();
+
+      if (!permResult.granted) {
+        if (mountedRef.current) {
+          setError('Location permission denied. Please enable location access in your device settings.');
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      // Get initial location with timeout
+      console.log('[Map Overview] Getting initial location...');
       try {
-        console.log('[Map Overview] Requesting location permission...');
-
-        const { status } = await Location.requestForegroundPermissionsAsync();
-
-        if (status !== 'granted') {
-          if (mounted) {
-            setError('Location permission denied. Please enable location access in your device settings.');
-            setIsLoading(false);
-          }
+        const initialUpdate = await locationService.getCurrentLocation(10000);
+        if (mountedRef.current) {
+          setLocationFromUpdate(initialUpdate);
+          setIsLoading(false);
+          console.log('[Map Overview] Initial location:', initialUpdate);
+        }
+      } catch (locErr: any) {
+        console.warn('[Map Overview] getCurrentLocation failed, trying last known:', locErr.message);
+        // Fallback to last known location
+        const lastKnown = locationService.getLastKnownLocation();
+        if (lastKnown && mountedRef.current) {
+          setLocationFromUpdate(lastKnown);
+          setIsLoading(false);
+          console.log('[Map Overview] Using last known location:', lastKnown);
+        } else if (mountedRef.current) {
+          setError(locationService.getLocationErrorMessage(locErr));
+          setIsLoading(false);
           return;
         }
-
-        // Get initial location
-        console.log('[Map Overview] Getting initial location...');
-        const initialLocation = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-
-        if (mounted) {
-          setLocation(initialLocation);
-
-          // Set initial region centered on user
-          const initialRegion = {
-            latitude: initialLocation.coords.latitude,
-            longitude: initialLocation.coords.longitude,
-            latitudeDelta: 0.05,
-            longitudeDelta: 0.05,
-          };
-          setRegion(initialRegion);
-
-          setIsLoading(false);
-          console.log('[Map Overview] Initial location:', initialLocation.coords);
-        }
-
-        // Start continuous tracking
-        // Updates every 5 seconds OR when user moves 10 meters
-        locationSubscription.current = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.Balanced,
-            distanceInterval: 10, // 10 meters
-            timeInterval: 5000, // 5 seconds
-          },
-          (newLocation) => {
-            if (mounted) {
-              setLocation(newLocation);
-              console.log('[Map Overview] Location updated:', newLocation.coords);
-            }
-          }
-        );
-
-        console.log('[Map Overview] Continuous tracking started');
-      } catch (err: any) {
-        console.error('[Map Overview] Location error:', err);
-        if (mounted) {
-          setError(err.message || 'Failed to get location. Please try again.');
-          setIsLoading(false);
-        }
       }
-    };
 
+      // Start continuous tracking
+      locationSubscription.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          distanceInterval: 10,
+          timeInterval: 5000,
+        },
+        (newLocation) => {
+          if (mountedRef.current) {
+            setLocation(newLocation);
+          }
+        }
+      );
+
+      console.log('[Map Overview] Continuous tracking started');
+    } catch (err: any) {
+      console.error('[Map Overview] Location error:', err);
+      if (mountedRef.current) {
+        setError(locationService.getLocationErrorMessage(err));
+        setIsLoading(false);
+      }
+    }
+  }, [setLocationFromUpdate]);
+
+  useEffect(() => {
+    mountedRef.current = true;
     setupLocationTracking();
 
-    // Cleanup on unmount
     return () => {
-      mounted = false;
+      mountedRef.current = false;
       if (locationSubscription.current) {
         locationSubscription.current.remove();
         console.log('[Map Overview] Location tracking stopped');
       }
     };
-  }, []);
+  }, [setupLocationTracking]);
 
   // Show loading state
   if (isLoading) {
@@ -132,6 +148,10 @@ export default function MapOverviewScreen() {
             <Ionicons name="alert-circle" size={64} color={Colors.danger} />
             <Text style={styles.errorTitle}>Map Error</Text>
             <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={setupLocationTracking}>
+              <Ionicons name="refresh" size={20} color={Colors.textWhite} />
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
       </ErrorBoundary>
@@ -227,6 +247,21 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     color: Colors.textSecondary,
     textAlign: 'center',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.lg,
+  },
+  retryButtonText: {
+    fontSize: FontSizes.md,
+    fontWeight: '600',
+    color: Colors.textWhite,
   },
   infoPanel: {
     position: 'absolute',

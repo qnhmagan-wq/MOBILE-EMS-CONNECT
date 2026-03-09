@@ -17,11 +17,14 @@ export interface UseDispatchPollingReturn {
   activeDispatches: Dispatch[]; // Only active statuses
   nearbyIncidents: NearbyIncident[]; // Nearby pending incidents
   isPolling: boolean;
+  lastPollTime: Date | null;
+  lastPollResult: string | null; // Diagnostic: summary of last poll result
   error: string | null;
   startPolling: () => void;
   stopPolling: () => void;
   updateDispatchStatus: (dispatchId: number, status: DispatchStatus) => Promise<void>;
   refreshDispatches: () => Promise<void>;
+  retryNow: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -29,7 +32,9 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
   const [dispatches, setDispatches] = useState<Dispatch[]>([]);
   const [nearbyIncidents, setNearbyIncidents] = useState<NearbyIncident[]>([]);
   const [isPolling, setIsPolling] = useState(false);
+  const [lastPollTime, setLastPollTime] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastPollResult, setLastPollResult] = useState<string | null>(null);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastSeenDispatchIds = useRef<Set<number>>(new Set());
@@ -52,6 +57,11 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
         ids: fetchedDispatches.map((d) => d.id),
       });
 
+      // Warn when backend returns nearby incidents but no dispatches — likely a duty status issue
+      if (fetchedDispatches.length === 0 && fetchedNearby.length > 0) {
+        console.warn('[useDispatchPolling] ⚠️ No dispatches but nearby incidents exist — backend may not see responder as on-duty');
+      }
+
       // Detect new dispatches (not seen before)
       const newDispatches = fetchedDispatches.filter(
         (dispatch) => !lastSeenDispatchIds.current.has(dispatch.id)
@@ -67,6 +77,11 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
 
       setDispatches(fetchedDispatches);
       setNearbyIncidents(fetchedNearby);
+      setLastPollTime(new Date());
+      const rawKeys = response._rawKeys || 'unknown';
+      setLastPollResult(
+        `dispatches: ${fetchedDispatches.length}, nearby: ${fetchedNearby.length}, ids: [${fetchedDispatches.map((d) => d.id).join(',')}], keys: [${rawKeys}]`
+      );
       setError(null);
       consecutiveFailuresRef.current = 0;
     } catch (err: any) {
@@ -79,6 +94,10 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
         message: err.message,
       });
 
+      setLastPollResult(
+        `ERROR: ${statusCode || 'network'} - ${err.response?.data?.message || err.message}`
+      );
+
       // 401 handled by API interceptor (clears auth) - don't show error
       if (statusCode === 401) return;
 
@@ -87,7 +106,8 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
         if (!err.response) {
           setError('Network connection lost. Please check your internet connection.');
         } else {
-          setError('Failed to load dispatches. Please check your connection.');
+          const serverMsg = err.response?.data?.message || err.response?.statusText || 'Unknown error';
+          setError(`Server error (HTTP ${statusCode}): ${serverMsg}`);
         }
       }
     }
@@ -173,6 +193,15 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
   );
 
   /**
+   * Retry now - resets failure counter, clears error, and fetches immediately
+   */
+  const retryNow = useCallback(async () => {
+    consecutiveFailuresRef.current = 0;
+    setError(null);
+    await refreshDispatches();
+  }, [refreshDispatches]);
+
+  /**
    * Clear error
    */
   const clearError = useCallback(() => {
@@ -202,11 +231,14 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
     activeDispatches,
     nearbyIncidents,
     isPolling,
+    lastPollTime,
+    lastPollResult,
     error,
     startPolling,
     stopPolling,
     updateDispatchStatus,
     refreshDispatches,
+    retryNow,
     clearError,
   };
 };

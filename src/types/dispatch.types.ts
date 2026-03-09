@@ -157,6 +157,7 @@ export interface NearbyIncident {
 export interface GetDispatchesResponse {
   dispatches: Dispatch[];
   nearby_incidents?: NearbyIncident[];
+  _rawKeys?: string;
 }
 
 /**

@@ -1,19 +1,30 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, RefreshControl } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
-import { Dispatch, DispatchStatus, NearbyIncident } from "@/src/types/dispatch.types";
-import { Alert, Linking } from "react-native";
+import { Dispatch, DispatchStatus } from "@/src/types/dispatch.types";
+import { Linking } from "react-native";
 
 export default function ResponderIncidentsScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { activeDispatches, nearbyIncidents, isTrackingActive, updateDispatchStatus } = useDispatch();
+  const { activeDispatches, isTrackingActive, updateDispatchStatus, refreshDispatches, lastPollTime, lastPollResult } = useDispatch();
   const [status, setStatus] = React.useState<'Available' | 'Busy'>('Available');
-  const [acceptingIncident, setAcceptingIncident] = React.useState<number | null>(null);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+
+  const handleRefresh = React.useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshDispatches();
+    } catch (err) {
+      console.error('[Incidents] Refresh failed:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshDispatches]);
 
   const getPriority = (type: string): 'HIGH' | 'MID' | 'LOW' => {
     if (type === 'medical' || type === 'fire') {
@@ -88,37 +99,18 @@ export default function ResponderIncidentsScreen() {
     }
   };
 
-  const handleAcceptNearbyIncident = async (incident: NearbyIncident) => {
-    if (!incident.can_accept) {
-      Alert.alert('Cannot Accept', 'This incident is no longer available or you already have an active dispatch.');
-      return;
-    }
+  // Compute "last polled X seconds ago" text
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 5000);
+    return () => clearInterval(timer);
+  }, []);
 
-    setAcceptingIncident(incident.incident_id);
-    try {
-      // Create a new dispatch by accepting the nearby incident
-      // This would need a new API endpoint: POST /api/responder/incidents/{id}/accept
-      // For now, we'll show an alert
-      Alert.alert(
-        'Accept Nearby Incident',
-        `Accept this ${incident.type} emergency ${incident.distance_text} away?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Accept',
-            onPress: async () => {
-              // TODO: Implement accept nearby incident API call
-              Alert.alert('Feature Coming Soon', 'This feature requires backend support to accept nearby incidents.');
-            }
-          }
-        ]
-      );
-    } catch (error) {
-      console.error('[Incidents] Accept nearby incident error:', error);
-      Alert.alert('Error', 'Failed to accept incident. Please try again.');
-    } finally {
-      setAcceptingIncident(null);
-    }
+  const getLastPollText = () => {
+    if (!lastPollTime) return 'Waiting for first poll...';
+    const seconds = Math.round((Date.now() - lastPollTime.getTime()) / 1000);
+    if (seconds < 5) return 'Last polled: just now';
+    return `Last polled: ${seconds}s ago`;
   };
 
   return (
@@ -148,27 +140,53 @@ export default function ResponderIncidentsScreen() {
       {/* Title */}
       <View style={styles.titleContainer}>
         <Text style={styles.title}>Incident Notifications Module:</Text>
+        {isTrackingActive && (
+          <Text style={styles.pollStatus}>{getLastPollText()}</Text>
+        )}
       </View>
 
       {/* Dispatches List */}
       {!isTrackingActive ? (
-        <View style={styles.emptyState}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.emptyState}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[Colors.primary]} tintColor={Colors.primary} />
+          }
+        >
           <Ionicons name="moon-outline" size={64} color={Colors.textSecondary} />
           <Text style={styles.emptyTitle}>You are Off Duty</Text>
           <Text style={styles.emptyText}>
             Toggle duty status to ON in the Home screen to start receiving dispatch assignments
           </Text>
-        </View>
+        </ScrollView>
       ) : activeDispatches.length === 0 ? (
-        <View style={styles.emptyState}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.emptyState}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[Colors.primary]} tintColor={Colors.primary} />
+          }
+        >
           <Ionicons name="checkmark-circle-outline" size={64} color={Colors.textSecondary} />
           <Text style={styles.emptyTitle}>No Active Dispatches</Text>
           <Text style={styles.emptyText}>
-            You will receive a notification when you are assigned to an emergency
+            Pull down to refresh. You will receive a notification when assigned to an emergency.
           </Text>
-        </View>
+          {lastPollResult && (
+            <Text style={styles.pollDiagnosticText} selectable>
+              Poll: {lastPollResult}
+            </Text>
+          )}
+        </ScrollView>
       ) : (
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.incidentsList}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.incidentsList}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[Colors.primary]} tintColor={Colors.primary} />
+          }
+        >
           {activeDispatches.map((dispatch) => {
             const priority = dispatch.incident ? getPriority(dispatch.incident.type) : 'LOW';
             return (
@@ -223,59 +241,6 @@ export default function ResponderIncidentsScreen() {
             );
           })}
         </ScrollView>
-      )}
-
-      {/* Nearby Incidents Section */}
-      {isTrackingActive && nearbyIncidents.length > 0 && (
-        <View style={styles.nearbySection}>
-          <View style={styles.nearbySectionHeader}>
-            <Ionicons name="radio-outline" size={20} color={Colors.textSecondary} />
-            <Text style={styles.nearbySectionTitle}>Nearby Incidents ({nearbyIncidents.length})</Text>
-          </View>
-          <ScrollView style={styles.nearbyScrollView} contentContainerStyle={styles.nearbyList} horizontal>
-            {nearbyIncidents.map((incident) => (
-              <TouchableOpacity
-                key={incident.incident_id}
-                style={styles.nearbyCard}
-                onPress={() => handleAcceptNearbyIncident(incident)}
-                disabled={!incident.can_accept || acceptingIncident === incident.incident_id}
-              >
-                <View style={styles.nearbyHeader}>
-                  <Text style={styles.nearbyEmergencyIcon}>
-                    {getIncidentIcon(incident.type)}
-                  </Text>
-                  <Text style={styles.nearbyTitle} numberOfLines={1}>
-                    {incident.type.charAt(0).toUpperCase() + incident.type.slice(1).replace('_', ' ')}
-                  </Text>
-                </View>
-                <View style={styles.nearbyLocation}>
-                  <Ionicons name="location" size={14} color={Colors.textSecondary} />
-                  <Text style={styles.nearbyLocationText} numberOfLines={1}>
-                    {incident.address}
-                  </Text>
-                </View>
-                {incident.description && (
-                  <Text style={styles.nearbyDescription} numberOfLines={2}>
-                    {incident.description}
-                  </Text>
-                )}
-                <View style={styles.nearbyDistance}>
-                  <Ionicons name="navigate" size={14} color={Colors.textSecondary} />
-                  <Text style={styles.nearbyDistanceText}>
-                    {incident.distance_text} • {incident.duration_text}
-                  </Text>
-                </View>
-                {incident.can_accept && (
-                  <View style={styles.nearbyAcceptButton}>
-                    <Text style={styles.nearbyAcceptText}>
-                      {acceptingIncident === incident.incident_id ? 'Accepting...' : 'Tap to Accept'}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
       )}
 
       {/* Bottom Red Section */}
@@ -362,6 +327,11 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     fontWeight: "600",
     color: Colors.textPrimary,
+  },
+  pollStatus: {
+    fontSize: FontSizes.xs,
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
   loadingContainer: {
     flex: 1,
@@ -495,97 +465,13 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: "center",
   },
-  nearbySection: {
-    backgroundColor: Colors.surface,
-    paddingVertical: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  nearbySectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.xs,
+  pollDiagnosticText: {
+    fontSize: FontSizes.xs,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    fontFamily: 'monospace',
+    marginTop: Spacing.md,
     paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
-  },
-  nearbySectionTitle: {
-    fontSize: FontSizes.md,
-    fontWeight: "600",
-    color: Colors.textSecondary,
-  },
-  nearbyScrollView: {
-    paddingHorizontal: Spacing.lg,
-  },
-  nearbyList: {
-    gap: Spacing.md,
-  },
-  nearbyCard: {
-    width: 250,
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  nearbyHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.xs,
-    marginBottom: Spacing.xs,
-  },
-  nearbyEmergencyIcon: {
-    fontSize: 20,
-  },
-  nearbyTitle: {
-    fontSize: FontSizes.md,
-    fontWeight: "600",
-    color: Colors.textPrimary,
-    flex: 1,
-  },
-  nearbyLocation: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.xs,
-    marginBottom: Spacing.xs,
-  },
-  nearbyLocationText: {
-    fontSize: FontSizes.xs,
-    color: Colors.textSecondary,
-    flex: 1,
-  },
-  nearbyDescription: {
-    fontSize: FontSizes.xs,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.xs,
-    lineHeight: 16,
-  },
-  nearbyDistance: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.xs,
-    marginBottom: Spacing.sm,
-  },
-  nearbyDistanceText: {
-    fontSize: FontSizes.xs,
-    fontWeight: "600",
-    color: Colors.textPrimary,
-  },
-  nearbyAcceptButton: {
-    backgroundColor: Colors.primary,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.sm,
-    alignItems: "center",
-  },
-  nearbyAcceptText: {
-    fontSize: FontSizes.sm,
-    fontWeight: "600",
-    color: Colors.textWhite,
   },
   bottomSection: {
     height: 100,

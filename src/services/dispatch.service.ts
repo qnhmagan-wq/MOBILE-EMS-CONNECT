@@ -95,17 +95,88 @@ export const updateDutyStatus = async (
  * Get all dispatches assigned to the current responder
  * GET /api/responder/dispatches
  * Returns assigned dispatches and nearby pending incidents
+ *
+ * Normalizes response across multiple possible backend formats:
+ * - { dispatches: [...], nearby_incidents: [...] }
+ * - { data: { dispatches: [...], nearby_incidents: [...] } }
+ * - { data: [...] } (bare array in data key)
+ * - [...] (bare array response)
  */
 export const getDispatches = async (): Promise<GetDispatchesResponse> => {
   try {
-    const response = await api.get<GetDispatchesResponse>('/responder/dispatches');
+    const response = await api.get('/responder/dispatches');
+    const rawData = response.data;
+
+    console.log('[Dispatch Service] RAW response keys:', rawData ? Object.keys(rawData) : 'null');
+    console.log('[Dispatch Service] RAW response type:', typeof rawData, Array.isArray(rawData) ? '(array)' : '');
+    console.log('[Dispatch Service] RAW response:', JSON.stringify(rawData));
+
+    // Normalize dispatches from multiple possible response shapes
+    let dispatches: Dispatch[] = [];
+    let nearbyIncidents: any[] = [];
+
+    if (Array.isArray(rawData)) {
+      // Backend returned a bare array
+      dispatches = rawData.filter((item: any) => item.incident_id !== undefined);
+      console.log('[Dispatch Service] Parsed as bare array');
+    } else if (rawData && typeof rawData === 'object') {
+      // Try: rawData.assigned_dispatches (actual backend key)
+      if (Array.isArray(rawData.assigned_dispatches)) {
+        dispatches = rawData.assigned_dispatches;
+        console.log('[Dispatch Service] Parsed from rawData.assigned_dispatches');
+      }
+      // Try: rawData.dispatches (fallback)
+      else if (Array.isArray(rawData.dispatches)) {
+        dispatches = rawData.dispatches;
+        console.log('[Dispatch Service] Parsed from rawData.dispatches');
+      }
+      // Try: rawData.data.assigned_dispatches (Laravel nested wrapper)
+      else if (rawData.data && Array.isArray(rawData.data.assigned_dispatches)) {
+        dispatches = rawData.data.assigned_dispatches;
+        console.log('[Dispatch Service] Parsed from rawData.data.assigned_dispatches');
+      }
+      // Try: rawData.data.dispatches (Laravel nested wrapper)
+      else if (rawData.data && Array.isArray(rawData.data.dispatches)) {
+        dispatches = rawData.data.dispatches;
+        console.log('[Dispatch Service] Parsed from rawData.data.dispatches');
+      }
+      // Try: rawData.data as array (Laravel data key with bare array)
+      else if (Array.isArray(rawData.data)) {
+        dispatches = rawData.data.filter((item: any) => item.incident_id !== undefined);
+        console.log('[Dispatch Service] Parsed from rawData.data (array)');
+      }
+
+      // Normalize nearby_incidents
+      if (Array.isArray(rawData.nearby_incidents)) {
+        nearbyIncidents = rawData.nearby_incidents;
+      } else if (rawData.data && Array.isArray(rawData.data.nearby_incidents)) {
+        nearbyIncidents = rawData.data.nearby_incidents;
+      }
+    }
+
     console.log('[Dispatch Service] Fetched dispatches:', {
-      assignedCount: response.data.dispatches?.length || 0,
-      nearbyCount: response.data.nearby_incidents?.length || 0
+      assignedCount: dispatches.length,
+      nearbyCount: nearbyIncidents.length,
+      dispatchIds: dispatches.map((d: any) => d.id),
     });
-    return response.data;
+
+    // Include raw keys for mobile diagnostics (not visible in console on device)
+    let rawKeys = 'null';
+    if (Array.isArray(rawData)) {
+      rawKeys = '(array)';
+    } else if (rawData && typeof rawData === 'object') {
+      rawKeys = Object.keys(rawData).join(',');
+    }
+
+    return { dispatches, nearby_incidents: nearbyIncidents, _rawKeys: rawKeys };
   } catch (error: any) {
-    console.error('[Dispatch Service] Get dispatches error:', error.response?.data || error.message);
+    console.error('[Dispatch Service] Get dispatches error:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
     throw error;
   }
 };
@@ -196,6 +267,36 @@ export const submitMultiPatientPreArrival = async (
       dispatchId,
       patientCount: patients.length,
       timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+};
+
+/**
+ * Accept a nearby incident (self-dispatch)
+ * POST /api/responder/incidents/:id/accept
+ */
+export const acceptNearbyIncident = async (
+  incidentId: number
+): Promise<UpdateDispatchStatusResponse> => {
+  try {
+    console.log('[Dispatch Service] Accepting nearby incident:', {
+      incidentId,
+      timestamp: new Date().toISOString(),
+    });
+
+    const response = await api.post<UpdateDispatchStatusResponse>(
+      `/responder/incidents/${incidentId}/accept`
+    );
+
+    console.log('[Dispatch Service] Nearby incident accepted:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('[Dispatch Service] Accept nearby incident error:', {
+      status: error.response?.status,
+      data: error.response?.data || error.message,
+      incidentId,
+      timestamp: new Date().toISOString(),
     });
     throw error;
   }

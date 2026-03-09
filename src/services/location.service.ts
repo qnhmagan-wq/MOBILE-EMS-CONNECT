@@ -56,6 +56,23 @@ export const getCurrentLocation = async (timeoutMs: number = 10000): Promise<Loc
       throw new Error('Location permission not granted');
     }
 
+    // Seed lastKnownLocation from device cache if null (e.g. fresh app start)
+    if (!lastKnownLocation) {
+      try {
+        const cached = await Location.getLastKnownPositionAsync();
+        if (cached) {
+          lastKnownLocation = {
+            latitude: cached.coords.latitude,
+            longitude: cached.coords.longitude,
+            timestamp: cached.timestamp,
+          };
+          console.log('[Location Service] Seeded lastKnownLocation from device cache');
+        }
+      } catch (cacheErr: any) {
+        console.warn('[Location Service] Could not seed from device cache:', cacheErr.message);
+      }
+    }
+
     // Create location request promise
     const locationPromise = Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.High,
@@ -85,10 +102,11 @@ export const getCurrentLocation = async (timeoutMs: number = 10000): Promise<Loc
   } catch (error: any) {
     console.error('[Location Service] Get location error:', error.message);
 
-    // If timeout occurred and we have a cached location, suggest using it
+    // If timeout occurred and we have a cached location, return it
+    // A stale location is better than no location for the backend's "has GPS" filter
     if (error.message?.includes('timeout') && lastKnownLocation) {
-      console.warn('[Location Service] Timeout - using last known location');
-      // Note: Caller should handle this by checking lastKnownLocation separately if needed
+      console.warn('[Location Service] Timeout - returning last known location');
+      return lastKnownLocation;
     }
 
     throw error;

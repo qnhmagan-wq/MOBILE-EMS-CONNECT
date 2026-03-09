@@ -34,17 +34,24 @@ export interface DispatchContextType {
   // **FIX #4: Backend verification state**
   locationLastSent: Date | null;
   isBackendConfirmed: boolean;
+  // Duty status verification — true only when backend confirms is_on_duty: true
+  dutyStatusConfirmed: boolean;
+  // Location failure counter for UI visibility
+  locationFailureCount: number;
 
   // Dispatches
   dispatches: Dispatch[];
   activeDispatches: Dispatch[];
   nearbyIncidents: NearbyIncident[];
+  lastPollTime: Date | null;
+  lastPollResult: string | null;
 
   // Actions
   autoStartTracking: () => Promise<void>;
   stopTracking: () => Promise<void>;
   updateDispatchStatus: (dispatchId: number, status: DispatchStatus) => Promise<void>;
   refreshDispatches: () => Promise<void>;
+  retryDispatches: () => Promise<void>;
 
   // State
   isLoading: boolean;
@@ -64,6 +71,10 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // **FIX #4: Backend verification state**
   const [locationLastSent, setLocationLastSent] = useState<Date | null>(null);
   const [isBackendConfirmed, setIsBackendConfirmed] = useState(false);
+  // Duty status verification — tracks whether backend confirmed on-duty
+  const [dutyStatusConfirmed, setDutyStatusConfirmed] = useState(false);
+  // Location failure counter for UI visibility
+  const [locationFailureCount, setLocationFailureCount] = useState(0);
 
   // **FIX #2: Location interval ref for foreground updates**
   const locationIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -74,13 +85,53 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     activeDispatches,
     nearbyIncidents,
     isPolling,
+    lastPollTime,
+    lastPollResult,
     startPolling,
     stopPolling,
     updateDispatchStatus: updateDispatchStatusHook,
     refreshDispatches,
+    retryNow,
     error: pollingError,
     clearError: clearPollingError,
   } = useDispatchPolling();
+
+  /**
+   * Verify and log duty status response from backend.
+   * Returns true if backend confirmed on-duty, false otherwise.
+   */
+  const verifyDutyStatusResponse = useCallback((response: any, context: string): boolean => {
+    console.log(`🔍 [DispatchContext] Duty status verification (${context}):`);
+    console.log(`   Full response: ${JSON.stringify(response)}`);
+
+    // Check various response shapes the backend might use
+    const isOnDuty =
+      response?.status?.is_on_duty === true ||
+      response?.is_on_duty === true ||
+      response?.data?.is_on_duty === true ||
+      response?.responder?.is_on_duty === true;
+
+    const responderStatus =
+      response?.status?.responder_status ||
+      response?.responder_status ||
+      response?.data?.responder_status ||
+      response?.responder?.responder_status;
+
+    console.log(`   Parsed is_on_duty: ${isOnDuty}`);
+    console.log(`   Parsed responder_status: ${responderStatus}`);
+    console.log(`   Response keys: ${response ? Object.keys(response).join(', ') : 'null'}`);
+
+    if (!isOnDuty) {
+      console.error(`❌ [DispatchContext] Backend did NOT confirm on-duty! (${context})`);
+      console.error(`   This likely means the backend rejected or ignored the duty status update.`);
+      console.error(`   The admin panel will show "0 responder(s) on duty" and dispatches won't appear.`);
+    } else {
+      console.log(`✅ [DispatchContext] Backend CONFIRMED on-duty (${context})`);
+    }
+
+    setDutyStatusConfirmed(isOnDuty);
+    return isOnDuty;
+  }, []);
 
   /**
    * **FIX #2 & #4: Send current location to backend with verification**
@@ -92,8 +143,8 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const location = await locationService.getCurrentLocation();
       if (location) {
         const response = await dispatchService.updateLocation({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
+          latitude: location.latitude,
+          longitude: location.longitude,
         });
 
         console.log('📍 [DispatchContext] Location update response:', response);
@@ -101,6 +152,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         // Any successful response means the backend received the location
         setLocationLastSent(new Date());
         setIsBackendConfirmed(true);
+        setLocationFailureCount(0);
       }
     } catch (error: any) {
       const statusCode = error.response?.status;
@@ -121,20 +173,37 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const location = await locationService.getCurrentLocation();
           if (location) {
             const response = await dispatchService.updateLocation({
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
+              latitude: location.latitude,
+              longitude: location.longitude,
             });
             console.log('✅ [DispatchContext] Location update succeeded after recovery');
             setLocationLastSent(new Date());
             setIsBackendConfirmed(true);
+            setLocationFailureCount(0);
           }
         } catch (retryError: any) {
           console.error('❌ [DispatchContext] Failed to recover status:', retryError.response?.data || retryError.message);
           setIsBackendConfirmed(false);
+          setLocationFailureCount(prev => prev + 1);
         }
       } else {
         console.error('[DispatchContext] Foreground location update failed:', error.response?.data || error.message);
-        setIsBackendConfirmed(false);
+
+        // If the error is a GPS timeout (not a backend error) and background tracking is active,
+        // don't mark as failed — background task is successfully sending location
+        const isGpsTimeout = !error.response && (
+          error.message?.includes('timeout') || error.message?.includes('timed out') || error.message?.includes('GPS')
+        );
+        const bgActive = await isBackgroundTrackingActive();
+
+        if (isGpsTimeout && bgActive) {
+          console.log('[DispatchContext] GPS timeout but background tracking active — treating as OK');
+          setIsBackendConfirmed(true);
+          setLocationFailureCount(0);
+        } else {
+          setIsBackendConfirmed(false);
+          setLocationFailureCount(prev => prev + 1);
+        }
       }
     }
   }, []);
@@ -178,20 +247,78 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       console.log('[DispatchContext] Auto-starting location tracking...');
 
-      // Request permissions
+      // **Step 1: Set duty status FIRST (backend requires on-duty before accepting location)**
+      console.log('[DispatchContext] Step 1: Setting responder status to ON DUTY...');
+      try {
+        const dutyResponse = await dispatchService.updateDutyStatus({
+          is_on_duty: true,
+          responder_status: 'idle',
+        });
+        const confirmed = verifyDutyStatusResponse(dutyResponse, 'autoStartTracking');
+
+        if (!confirmed) {
+          Alert.alert(
+            'Duty Status Warning',
+            `Backend did not confirm "on duty" status. Dispatches may not appear. Please check with your administrator.`,
+            [{ text: 'OK' }]
+          );
+        }
+      } catch (dutyError: any) {
+        console.error('❌ [DispatchContext] Failed to set duty status:', dutyError.message);
+        setDutyStatusConfirmed(false);
+        Alert.alert(
+          'Duty Status Error',
+          `Failed to set your status to "on duty" (${dutyError.message}). Dispatches may not appear. Please check your connection.`,
+          [{ text: 'OK' }]
+        );
+      }
+
+      // **Step 2: Send location now that we're on-duty**
+      console.log('[DispatchContext] Step 2: Sending initial location update...');
+      try {
+        const location = await locationService.getCurrentLocation();
+        if (location) {
+          const locResponse = await dispatchService.updateLocation({
+            latitude: location.latitude,
+            longitude: location.longitude,
+          });
+          console.log('✅ [DispatchContext] Initial location sent:', {
+            lat: location.latitude,
+            lng: location.longitude,
+            response: JSON.stringify(locResponse),
+          });
+          setLocationLastSent(new Date());
+          setIsBackendConfirmed(true);
+          setLocationFailureCount(0);
+        }
+      } catch (locError: any) {
+        console.error('[DispatchContext] Initial location failed:', locError.response?.status, locError.response?.data || locError.message);
+        setLocationFailureCount(prev => prev + 1);
+      }
+
+      // Request notification permission (do this early so dispatch alerts work)
+      const notifPerm = await notificationService.initializeNotifications();
+      if (!notifPerm) {
+        Alert.alert(
+          'Notification Permission',
+          'Notifications are disabled. You may not receive dispatch alerts.',
+          [{ text: 'OK' }]
+        );
+      }
+
+      // Request background location permissions
       const locationPerm = await requestBackgroundLocationPermissions();
       setHasLocationPermission(locationPerm.granted);
 
       if (!locationPerm.granted) {
-        console.log('[DispatchContext] Location permission denied, cannot start tracking');
-        setIsLoading(false);
+        console.warn('[DispatchContext] Background location permission denied — continuing with foreground-only tracking');
 
-        // **FIX #3: Show user-facing error for permission denial**
+        // Show a non-blocking warning (don't return early!)
         Alert.alert(
-          'Location Permission Required',
-          'Background location access is required to track your location while on duty. Please enable location permissions in your device settings.',
+          'Limited Location Tracking',
+          'Background location was denied. Your location will only update while the app is open. Dispatches will still appear.',
           [
-            { text: 'Cancel', style: 'cancel' },
+            { text: 'OK' },
             {
               text: 'Open Settings',
               onPress: () => {
@@ -205,69 +332,12 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ]
         );
 
-        return;
-      }
-
-      // Request notification permission
-      const notifPerm = await notificationService.initializeNotifications();
-      if (!notifPerm) {
-        Alert.alert(
-          'Notification Permission',
-          'Notifications are disabled. You may not receive dispatch alerts.',
-          [{ text: 'OK' }]
-        );
-      }
-
-      // **CRITICAL FIX: Update backend duty status BEFORE starting location tracking**
-      // Backend requires responders to be "on duty" before accepting location updates
-      console.log('[DispatchContext] Setting responder status to ON DUTY...');
-      try {
-        await dispatchService.updateDutyStatus({
-          is_on_duty: true,
-          responder_status: 'idle',
-        });
-        console.log('✅ [DispatchContext] Responder status set to ON DUTY');
-      } catch (error: any) {
-        console.error('❌ [DispatchContext] Failed to set duty status:', error.message);
-        setIsLoading(false);
-
-        // Show error to user
-        Alert.alert(
-          'Duty Status Error',
-          'Failed to set your status to "on duty". Location tracking cannot start without this. Please check your connection and try again.',
-          [{ text: 'OK' }]
-        );
-
-        // Don't continue - duty status is REQUIRED for location updates
-        throw new Error('Failed to set duty status - location tracking aborted');
-      }
-
-      // Start background location tracking
-      await startBackgroundLocationTracking();
-      setIsTrackingActive(true);
-
-      // **FIX #1: Send immediate location update to backend**
-      // This ensures admin sees responder immediately instead of waiting 15 seconds for first background update
-      try {
-        console.log('[DispatchContext] Sending initial location update');
-        const currentLocation = await locationService.getCurrentLocation();
-
-        if (currentLocation) {
-          const response = await dispatchService.updateLocation({
-            latitude: currentLocation.coords.latitude,
-            longitude: currentLocation.coords.longitude,
-          });
-          console.log('[DispatchContext] Initial location sent to backend:', {
-            lat: currentLocation.coords.latitude,
-            lng: currentLocation.coords.longitude,
-          });
-          // FIX: Set backend confirmed on initial successful update
-          setLocationLastSent(new Date());
-          setIsBackendConfirmed(true);
-        }
-      } catch (error) {
-        console.error('[DispatchContext] Failed to send initial location:', error);
-        // Don't throw - continue with background tracking
+        // Skip background tracking but continue with foreground tracking + polling
+        setIsTrackingActive(true);
+      } else {
+        // Start background location tracking
+        await startBackgroundLocationTracking();
+        setIsTrackingActive(true);
       }
 
       // **FIX #2: Start foreground fallback updates**
@@ -288,7 +358,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } finally {
       setIsLoading(false);
     }
-  }, [startPolling, startPeriodicLocationUpdates]);
+  }, [startPolling, startPeriodicLocationUpdates, verifyDutyStatusResponse]);
 
   /**
    * Stop location tracking and set duty status to offline
@@ -364,28 +434,41 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     console.log('[DispatchContext] Responder detected, checking auto-start...');
 
-    // Check if already tracking
+    // Always start polling immediately for responders so dispatches are received
+    // even if tracking setup fails
+    console.log('[DispatchContext] Starting dispatch polling for responder...');
+    startPolling();
+
+    // **Safety net: Check if already tracking, otherwise do full auto-start**
     (async () => {
       const isActive = await isBackgroundTrackingActive();
       if (isActive) {
         console.log('[DispatchContext] Background tracking already active, resuming...');
-        setIsTrackingActive(true);
 
-        // Re-confirm duty status before polling (backend may have lost state)
+        // Request foreground permission so sendLocationUpdate can get GPS
         try {
-          await dispatchService.updateDutyStatus({
+          await locationService.requestLocationPermissions();
+          setHasLocationPermission(true);
+        } catch (e: any) {
+          console.warn('[DispatchContext] Safety net: foreground permission request failed:', e.message);
+        }
+
+        // Set duty status to ensure backend knows we're on-duty
+        try {
+          const dutyResponse = await dispatchService.updateDutyStatus({
             is_on_duty: true,
             responder_status: 'idle',
           });
-          console.log('[DispatchContext] Duty status re-confirmed');
+          verifyDutyStatusResponse(dutyResponse, 'safety-net-resume');
         } catch (e: any) {
-          console.error('[DispatchContext] Failed to re-confirm duty status:', e.message);
+          console.error('[DispatchContext] Safety net: Failed to set duty status:', e.message);
+          setDutyStatusConfirmed(false);
         }
 
-        // Send immediate location to set isBackendConfirmed = true
+        // Send one location update to ensure backend has fresh GPS
         await sendLocationUpdate();
 
-        startPolling();
+        setIsTrackingActive(true);
         startPeriodicLocationUpdates();
       } else {
         console.log('[DispatchContext] Starting auto-start sequence...');
@@ -399,7 +482,8 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // **FIX #2: Cleanup foreground location updates**
       stopPeriodicLocationUpdates();
     };
-  }, [user, autoStartTracking, sendLocationUpdate, startPolling, startPeriodicLocationUpdates, stopPolling, stopPeriodicLocationUpdates, stopTracking]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   /**
    * Sync error from polling hook
@@ -410,18 +494,42 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [pollingError]);
 
+  /**
+   * Background location heartbeat — periodically check if background tracking is active
+   * and bridge that to React state so UI shows correct location status
+   */
+  useEffect(() => {
+    if (!isTrackingActive) return;
+
+    const heartbeat = setInterval(async () => {
+      const bgActive = await isBackgroundTrackingActive();
+      if (bgActive && !isBackendConfirmed) {
+        console.log('[DispatchContext] Heartbeat: background tracking active, setting isBackendConfirmed=true');
+        setIsBackendConfirmed(true);
+        setLocationFailureCount(0);
+      }
+    }, 30000); // Every 30 seconds
+
+    return () => clearInterval(heartbeat);
+  }, [isTrackingActive, isBackendConfirmed]);
+
   const value: DispatchContextType = {
     isTrackingActive,
     hasLocationPermission,
     locationLastSent,
     isBackendConfirmed,
+    dutyStatusConfirmed,
+    locationFailureCount,
     dispatches,
     activeDispatches,
     nearbyIncidents,
+    lastPollTime,
+    lastPollResult,
     autoStartTracking,
     stopTracking,
     updateDispatchStatus,
     refreshDispatches,
+    retryDispatches: retryNow,
     isLoading,
     error,
     clearError,
