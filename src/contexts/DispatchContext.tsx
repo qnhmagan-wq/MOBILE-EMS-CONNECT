@@ -49,7 +49,7 @@ export interface DispatchContextType {
   // Actions
   autoStartTracking: () => Promise<void>;
   stopTracking: () => Promise<void>;
-  updateDispatchStatus: (dispatchId: number, status: DispatchStatus) => Promise<void>;
+  updateDispatchStatus: (dispatchId: number, status: DispatchStatus) => Promise<any>;
   refreshDispatches: () => Promise<void>;
   retryDispatches: () => Promise<void>;
 
@@ -400,7 +400,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateDispatchStatus = useCallback(
     async (dispatchId: number, status: DispatchStatus) => {
       try {
-        await updateDispatchStatusHook(dispatchId, status);
+        return await updateDispatchStatusHook(dispatchId, status);
       } catch (error) {
         // Error already handled in hook
         throw error;

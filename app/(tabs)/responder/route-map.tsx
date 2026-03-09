@@ -35,6 +35,24 @@ import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import * as mapsService from '@/src/services/maps.service';
 
+/**
+ * Calculate straight-line distance between two coordinates (Haversine formula)
+ */
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // Distance in meters
+}
+
 export default function RouteMapScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -42,15 +60,17 @@ export default function RouteMapScreen() {
   const dispatchId = params.dispatchId ? parseInt(params.dispatchId as string) : null;
   // Note: autoStart param removed - status updates now handled in incident-details.tsx
 
-  // Parse incident data from params (primary source)
-  let incidentFromParams = null;
-  if (params.incidentData) {
+  // Parse incident data from params (primary source) — memoized to prevent
+  // re-parsing on every render (params.incidentData is a stable string)
+  const incidentFromParams = useMemo(() => {
+    if (!params.incidentData) return null;
     try {
-      incidentFromParams = JSON.parse(decodeURIComponent(params.incidentData as string));
+      return JSON.parse(decodeURIComponent(params.incidentData as string));
     } catch (err) {
       console.error('[Route Map] Failed to parse incident data from params:', err);
+      return null;
     }
-  }
+  }, [params.incidentData]);
 
   const { dispatches, updateDispatchStatus } = useDispatch();
 
@@ -60,6 +80,11 @@ export default function RouteMapScreen() {
 
   // Use incident from params if available, otherwise fall back to context
   const incident = incidentFromParams || incidentFromContext;
+
+  // Extract stable primitive coordinates so the location tracking effect
+  // doesn't re-run when dispatch polling creates new object references
+  const stableIncidentLat = incident?.latitude ?? null;
+  const stableIncidentLng = incident?.longitude ?? null;
 
   const [responderLocation, setResponderLocation] = useState<Location.LocationObject | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(true);
@@ -111,8 +136,8 @@ export default function RouteMapScreen() {
   const ROUTE_UPDATE_DISTANCE_THRESHOLD = 100; // Only update route if moved >100 meters
 
   /**
-   * Update responder location every 5 seconds
-   * Route API is called less frequently to reduce stuttering
+   * Effect 1: Validation only — sets error state when params/data are missing.
+   * Depends on object references but does NOT start intervals or GPS.
    */
   useEffect(() => {
     if (!incidentId || !dispatchId) {
@@ -140,6 +165,20 @@ export default function RouteMapScreen() {
       return;
     }
 
+    // Clear any previous error if all validation passes
+    setError(null);
+  }, [incidentId, dispatchId, incident, incidentFromParams, incidentFromContext, dispatch]);
+
+  /**
+   * Effect 2: Location tracking + route fetching.
+   * Depends on stable primitives (coordinates) so dispatch polling
+   * doesn't cause re-initialization and map flickering.
+   */
+  useEffect(() => {
+    if (!incidentId || !dispatchId || stableIncidentLat === null || stableIncidentLng === null) {
+      return;
+    }
+
     // Request permission and get initial location
     requestLocationPermission();
 
@@ -152,8 +191,8 @@ export default function RouteMapScreen() {
             longitude: location.coords.longitude,
           },
           {
-            latitude: incident.latitude,
-            longitude: incident.longitude,
+            latitude: stableIncidentLat,
+            longitude: stableIncidentLng,
           }
         );
 
@@ -171,8 +210,8 @@ export default function RouteMapScreen() {
         const distanceMeters = calculateDistance(
           location.coords.latitude,
           location.coords.longitude,
-          incident.latitude,
-          incident.longitude
+          stableIncidentLat,
+          stableIncidentLng
         );
         const distanceKm = (distanceMeters / 1000).toFixed(2);
         setDistance(`${distanceKm} km (approx)`);
@@ -230,13 +269,15 @@ export default function RouteMapScreen() {
       .catch(console.error);
 
     return () => clearInterval(interval);
-  }, [incidentId, dispatchId, incident, requestLocationPermission]);
+  }, [incidentId, dispatchId, stableIncidentLat, stableIncidentLng, requestLocationPermission]);
 
   // Note: Auto-update to en_route is now handled in incident-details.tsx
   // before navigation to avoid race conditions with backend status validation
 
   /**
    * Handle "I've Arrived" button press
+   * Includes defensive status check — if dispatch is still 'accepted' (en_route
+   * transition may have silently failed), auto-recovers by updating to en_route first.
    */
   const handleArrived = async () => {
     if (!dispatchId) return;
@@ -251,6 +292,41 @@ export default function RouteMapScreen() {
           onPress: async () => {
             setIsUpdatingStatus(true);
             try {
+              // Defensive: check current dispatch status from context
+              const currentDispatch = dispatches.find(d => d.id === dispatchId);
+              const currentStatus = currentDispatch?.status;
+
+              if (currentStatus === 'arrived') {
+                // Already arrived — just go back
+                Alert.alert('Already Arrived', 'You have already been marked as arrived.', [
+                  { text: 'OK', onPress: () => router.back() },
+                ]);
+                return;
+              }
+
+              if (currentStatus && !['accepted', 'en_route'].includes(currentStatus)) {
+                // Unexpected status — can't transition to arrived
+                Alert.alert(
+                  'Status Error',
+                  `Cannot mark as arrived — dispatch is currently "${currentStatus}". Please go back and check dispatch details.`,
+                  [{ text: 'OK' }]
+                );
+                return;
+              }
+
+              if (currentStatus === 'accepted') {
+                // en_route transition was missed — auto-recover
+                console.log('[Route Map] Dispatch still in accepted status, auto-recovering to en_route first...');
+                try {
+                  await updateDispatchStatus(dispatchId, 'en_route');
+                  // Brief delay so backend processes the transition
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                } catch (enRouteErr: any) {
+                  console.error('[Route Map] Failed to auto-recover en_route:', enRouteErr);
+                  // Continue trying arrived anyway — backend might allow it
+                }
+              }
+
               await updateDispatchStatus(dispatchId, 'arrived');
               console.log('[Route Map] Status updated to arrived');
               Alert.alert(
@@ -265,7 +341,13 @@ export default function RouteMapScreen() {
               );
             } catch (err: any) {
               console.error('[Route Map] Failed to update arrival status:', err);
-              Alert.alert('Error', 'Failed to update arrival status. Please try again.');
+              const backendMsg = err.response?.data?.message;
+              Alert.alert(
+                'Error',
+                backendMsg
+                  ? `Failed to update arrival status: ${backendMsg}`
+                  : 'Failed to update arrival status. Please try again.'
+              );
             } finally {
               setIsUpdatingStatus(false);
             }
@@ -301,24 +383,6 @@ export default function RouteMapScreen() {
       console.error('[Route Map] External navigation error:', error);
       Alert.alert('Error', 'Failed to open Google Maps. Please try again.');
     }
-  };
-
-  /**
-   * Calculate straight-line distance between two coordinates (Haversine formula)
-   */
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-    const R = 6371e3; // Earth's radius in meters
-    const φ1 = (lat1 * Math.PI) / 180;
-    const φ2 = (lat2 * Math.PI) / 180;
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-    const a =
-      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c; // Distance in meters
   };
 
   // Memoize polyline coordinates to prevent unnecessary re-renders

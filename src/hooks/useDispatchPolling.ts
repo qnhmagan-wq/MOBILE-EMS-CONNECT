@@ -22,7 +22,7 @@ export interface UseDispatchPollingReturn {
   error: string | null;
   startPolling: () => void;
   stopPolling: () => void;
-  updateDispatchStatus: (dispatchId: number, status: DispatchStatus) => Promise<void>;
+  updateDispatchStatus: (dispatchId: number, status: DispatchStatus) => Promise<any>;
   refreshDispatches: () => Promise<void>;
   retryNow: () => Promise<void>;
   clearError: () => void;
@@ -163,7 +163,7 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
    * Update dispatch status
    */
   const updateDispatchStatus = useCallback(
-    async (dispatchId: number, status: DispatchStatus) => {
+    async (dispatchId: number, status: DispatchStatus): Promise<any> => {
       try {
         const response = await dispatchService.updateDispatchStatus(dispatchId, { status });
 
@@ -183,6 +183,7 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
         );
 
         setError(null);
+        return response.dispatch;
       } catch (err: any) {
         console.error('[useDispatchPolling] Update status error:', err);
         setError('Failed to update dispatch status. Please try again.');
