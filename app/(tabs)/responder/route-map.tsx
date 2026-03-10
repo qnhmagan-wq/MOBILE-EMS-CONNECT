@@ -299,7 +299,9 @@ export default function RouteMapScreen() {
               if (currentStatus === 'arrived') {
                 // Already arrived — just go back
                 Alert.alert('Already Arrived', 'You have already been marked as arrived.', [
-                  { text: 'OK', onPress: () => router.back() },
+                  { text: 'OK', onPress: () => router.replace(
+                    `/(tabs)/responder/incident-details?id=${incidentId}&dispatchId=${dispatchId}`
+                  ) },
                 ]);
                 return;
               }
@@ -335,7 +337,9 @@ export default function RouteMapScreen() {
                 [
                   {
                     text: 'OK',
-                    onPress: () => router.back(), // Return to incident details
+                    onPress: () => router.replace(
+                      `/(tabs)/responder/incident-details?id=${incidentId}&dispatchId=${dispatchId}`
+                    ),
                   },
                 ]
               );

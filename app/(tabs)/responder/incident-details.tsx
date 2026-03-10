@@ -11,7 +11,6 @@ import {
   Linking,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useAuth } from "@/src/contexts/AuthContext";
 import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
@@ -26,9 +25,7 @@ import { PreArrivalModal } from "@/src/components/PreArrivalModal";
 export default function ResponderIncidentDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const incidentId = params.id ? parseInt(params.id as string) : null;
   const dispatchId = params.dispatchId ? parseInt(params.dispatchId as string) : null;
-  const { user } = useAuth();
   const { dispatches, updateDispatchStatus: updateStatus } = useDispatch();
 
   const [incident, setIncident] = useState<Incident | null>(null);
@@ -60,8 +57,6 @@ export default function ResponderIncidentDetailsScreen() {
           address: found.incident.address,
           description: found.incident.description,
           created_at: found.incident.created_at,
-          updated_at: found.incident.updated_at,
-          reporter_id: found.incident.reporter_id,
         };
         setIncident(incidentData);
       } else {
@@ -112,19 +107,13 @@ export default function ResponderIncidentDetailsScreen() {
 
     setIsUpdating(true);
     try {
-      const response = await updateStatus(dispatch.id, 'transporting_to_hospital');
+      await updateStatus(dispatch.id, 'transporting_to_hospital');
 
-      // Check if hospital route data was returned
-      if (response?.hospital_route) {
-        // Navigate to hospital navigation screen
-        if (isMounted.current) {
-          router.push(
-            `/(tabs)/responder/hospital-navigation?dispatchId=${dispatch.id}`
-          );
-        }
-      } else {
-        // Route data missing (shouldn't happen, but handle gracefully)
-        Alert.alert('Error', 'Hospital route information unavailable. Please try again.');
+      // Always navigate — hospital-navigation screen fetches route data if needed
+      if (isMounted.current) {
+        router.push(
+          `/(tabs)/responder/hospital-navigation?dispatchId=${dispatch.id}`
+        );
       }
     } catch (error: any) {
       handleHospitalTransportError(error);
@@ -385,8 +374,8 @@ export default function ResponderIncidentDetailsScreen() {
             <TouchableOpacity
               style={styles.phoneButton}
               onPress={() => {
-                const phone = dispatch.incident.reporter.phone_number;
-                Linking.openURL(`tel:${phone}`);
+                const phone = dispatch.incident.reporter?.phone_number;
+                if (phone) Linking.openURL(`tel:${phone}`);
               }}
             >
               <Ionicons name="call" size={20} color="#10B981" />
@@ -418,35 +407,35 @@ export default function ResponderIncidentDetailsScreen() {
 
             <TimelineItem
               label="Dispatch Accepted"
-              time={dispatch.accepted_at}
+              time={dispatch.accepted_at ?? null}
               icon="checkmark-circle"
               color="#3B82F6"
             />
 
             <TimelineItem
               label="En Route"
-              time={dispatch.en_route_at}
+              time={dispatch.en_route_at ?? null}
               icon="navigate"
               color="#F59E0B"
             />
 
             <TimelineItem
               label="Arrived at Scene"
-              time={dispatch.arrived_at}
+              time={dispatch.arrived_at ?? null}
               icon="location"
               color="#8B5CF6"
             />
 
             <TimelineItem
               label="Transporting to Hospital"
-              time={dispatch.transporting_to_hospital_at}
+              time={dispatch.transporting_to_hospital_at ?? null}
               icon="medical"
               color="#3B82F6"
             />
 
             <TimelineItem
               label="Incident Completed"
-              time={dispatch.completed_at}
+              time={dispatch.completed_at ?? null}
               icon="checkmark-done"
               color="#10B981"
               isLast={true}
@@ -486,7 +475,7 @@ export default function ResponderIncidentDetailsScreen() {
               onPress={() => setShowPreArrivalModal(true)}
             >
               <Ionicons
-                name={preArrivalData.length > 0 ? "checkmark-document" : "document-text"}
+                name={preArrivalData.length > 0 ? "checkmark-done" : "document-text"}
                 size={24}
                 color={Colors.textWhite}
               />

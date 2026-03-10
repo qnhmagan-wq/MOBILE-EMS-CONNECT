@@ -69,12 +69,23 @@ export default function HospitalNavigationScreen() {
           setIsLoading(false);
         } catch (error: any) {
           console.error('[Hospital Navigation] Failed to load route:', error);
+          const errorCode = error.response?.data?.error_code;
+          let errorMessage = 'Unable to determine hospital route. Please contact dispatch for hospital directions.';
+
+          if (errorCode === 'NO_HOSPITAL_ASSIGNED') {
+            errorMessage = 'No hospital is assigned to this dispatch. Please contact your administrator.';
+          } else if (errorCode === 'HOSPITAL_INACTIVE') {
+            errorMessage = 'The assigned hospital is currently inactive. Please contact dispatch.';
+          } else if (errorCode === 'HOSPITAL_NO_LOCATION') {
+            errorMessage = 'Hospital location data is unavailable. Please contact dispatch for directions.';
+          }
+
           Alert.alert(
-            'Error',
-            'Failed to load hospital route. Please try again.',
+            'Hospital Route Unavailable',
+            errorMessage,
             [
               {
-                text: 'OK',
+                text: 'Go Back',
                 onPress: () => router.back(),
               },
             ]
@@ -237,7 +248,7 @@ export default function HospitalNavigationScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Loading hospital route...</Text>
+          <Text style={styles.loadingText}>Finding nearest hospital...</Text>
         </View>
       </SafeAreaView>
     );
@@ -247,7 +258,11 @@ export default function HospitalNavigationScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
+          <Ionicons name="medical" size={48} color={Colors.textSecondary} style={{ marginBottom: Spacing.md }} />
           <Text style={styles.errorText}>Hospital route unavailable</Text>
+          <Text style={[styles.errorText, { fontSize: FontSizes.sm, marginBottom: Spacing.lg }]}>
+            Unable to determine a route to the nearest hospital. Please contact dispatch for directions.
+          </Text>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>
