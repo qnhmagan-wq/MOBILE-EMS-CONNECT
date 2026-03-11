@@ -37,16 +37,6 @@ export default function ResponderHomeScreen() {
       const firstId = dispatches.length > 0 ? dispatches[0].id : 'none';
       const firstStatus = dispatches.length > 0 ? dispatches[0].status : 'n/a';
 
-      Alert.alert(
-        'Debug Fetch Result',
-        `Raw keys: [${rawKeys}]\n` +
-        `Dispatches: ${dispatches.length}\n` +
-        `Nearby: ${nearby.length}\n` +
-        `First dispatch ID: ${firstId}\n` +
-        `First dispatch status: ${firstStatus}\n` +
-        `IDs: [${dispatches.map((d: any) => d.id).join(',')}]\n\n` +
-        `Raw JSON (first 500 chars):\n${JSON.stringify(response).substring(0, 500)}`
-      );
     } catch (err: any) {
       Alert.alert(
         'Debug Fetch Error',
@@ -205,36 +195,7 @@ export default function ResponderHomeScreen() {
           </Text>
         </View>
 
-        {/* Poll Diagnostics Card */}
-        {isTrackingActive && (
-          <View style={styles.diagnosticsCard}>
-            <View style={styles.diagnosticsHeader}>
-              <Ionicons name="bug" size={scale(18)} color={Colors.textSecondary} />
-              <Text style={styles.diagnosticsTitle}>Poll Diagnostics</Text>
-            </View>
-            <Text style={styles.diagnosticsText}>
-              User ID: {user?.id ?? 'unknown'}
-            </Text>
-            <Text style={styles.diagnosticsText}>
-              Last poll: {lastPollTime ? lastPollTime.toLocaleTimeString() : 'Never'}
-            </Text>
-            <Text style={styles.diagnosticsText} selectable>
-              Result: {lastPollResult || 'Waiting...'}
-            </Text>
-            <TouchableOpacity
-              style={styles.debugFetchButton}
-              onPress={handleDebugFetch}
-              disabled={debugLoading}
-            >
-              {debugLoading ? (
-                <ActivityIndicator size="small" color={Colors.textWhite} />
-              ) : (
-                <Text style={styles.debugFetchButtonText}>Debug Fetch</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
+        
         {/* Info Card */}
         <View style={styles.infoCard}>
           <Ionicons name="information-circle" size={scale(24)} color={Colors.primary} />
