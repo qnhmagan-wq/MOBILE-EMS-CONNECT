@@ -50,8 +50,12 @@ export default function HospitalNavigationScreen() {
       // Find dispatch from context
       const found = dispatches.find(d => d.id === dispatchId);
       if (!found) {
-        Alert.alert('Error', 'Dispatch not found');
-        router.back();
+        // Only show error if we never loaded this dispatch.
+        // If dispatch was previously set, it was completed and removed from polling.
+        if (!dispatch) {
+          Alert.alert('Error', 'Dispatch not found');
+          router.back();
+        }
         return;
       }
 
