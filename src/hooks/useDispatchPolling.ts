@@ -224,7 +224,7 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
    * Filter active dispatches (not completed or declined)
    */
   const activeDispatches = dispatches.filter(
-    (dispatch) => !['completed', 'declined'].includes(dispatch.status)
+    (dispatch) => !['completed', 'declined', 'cancelled'].includes(dispatch.status)
   );
 
   return {

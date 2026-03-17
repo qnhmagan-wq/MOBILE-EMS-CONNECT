@@ -15,12 +15,14 @@ import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { Incident } from "@/src/types/incident.types";
-import { Dispatch, DispatchStatus, PreArrivalData } from "@/src/types/dispatch.types";
+import { Dispatch, DispatchStatus, PreArrivalData, HospitalRouteData } from "@/src/types/dispatch.types";
 import { DispatchStatusBadge } from "@/components/DispatchStatusBadge";
 import TimelineItem from "@/components/TimelineItem";
 import { getElapsedTime } from "@/src/utils/time";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PreArrivalModal } from "@/src/components/PreArrivalModal";
+import { HospitalSelectionModal } from "@/src/components/HospitalSelectionModal";
+import * as dispatchService from "@/src/services/dispatch.service";
 
 export default function ResponderIncidentDetailsScreen() {
   const router = useRouter();
@@ -33,7 +35,9 @@ export default function ResponderIncidentDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showPreArrivalModal, setShowPreArrivalModal] = useState(false);
+  const [showHospitalModal, setShowHospitalModal] = useState(false);
   const [preArrivalData, setPreArrivalData] = useState<PreArrivalData[]>([]);
+  const [hospitalRoute, setHospitalRoute] = useState<HospitalRouteData | null>(null);
   const isMounted = useRef(true); // Track if component is mounted
 
   // Helper to check if pre-arrival form should be available
@@ -65,6 +69,24 @@ export default function ResponderIncidentDetailsScreen() {
     }
     setIsLoading(false);
   }, [dispatchId, dispatches]);
+
+  // Load hospital route when dispatch is arrived or transporting
+  useEffect(() => {
+    if (dispatch?.hospital_route) {
+      setHospitalRoute(dispatch.hospital_route);
+    } else if (
+      dispatch &&
+      (dispatch.status === 'arrived' || dispatch.status === 'transporting_to_hospital')
+    ) {
+      dispatchService.getHospitalRoute(dispatch.id).then((data) => {
+        if (isMounted.current) {
+          setHospitalRoute({ hospital: data.hospital, route: data.route });
+        }
+      }).catch((err) => {
+        console.log('[IncidentDetails] Hospital route not available:', err.response?.data?.error_code || err.message);
+      });
+    }
+  }, [dispatch?.id, dispatch?.status, dispatch?.hospital_route]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -260,6 +282,38 @@ export default function ResponderIncidentDetailsScreen() {
     );
   };
 
+  // Check if cancel is available for the current status
+  const canCancel = dispatch && ['assigned', 'accepted', 'en_route', 'arrived', 'transporting_to_hospital'].includes(dispatch.status);
+
+  const handleCancelDispatch = () => {
+    if (!dispatch) return;
+    Alert.alert(
+      'Cancel Dispatch',
+      'Are you sure you want to cancel this dispatch? This cannot be undone.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            setIsUpdating(true);
+            try {
+              await updateStatus(dispatch.id, 'cancelled');
+              Alert.alert('Dispatch Cancelled', 'The dispatch has been cancelled.', [
+                { text: 'OK', onPress: () => { if (isMounted.current) router.back(); } },
+              ]);
+            } catch (error: any) {
+              console.error('[IncidentDetails] Cancel error:', error);
+              Alert.alert('Error', error.response?.data?.message || 'Failed to cancel dispatch.');
+            } finally {
+              setIsUpdating(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (isLoading) {
     return (
       <ErrorBoundary>
@@ -321,6 +375,11 @@ export default function ResponderIncidentDetailsScreen() {
               {dispatch.transporting_to_hospital_at && dispatch.status === 'transporting_to_hospital' && (
                 <Text style={styles.elapsedTime}>
                   Transporting for {getElapsedTime(dispatch.transporting_to_hospital_at)}
+                </Text>
+              )}
+              {dispatch.cancelled_at && dispatch.status === 'cancelled' && (
+                <Text style={styles.elapsedTime}>
+                  Cancelled {getElapsedTime(dispatch.cancelled_at)} ago
                 </Text>
               )}
             </View>
@@ -386,6 +445,34 @@ export default function ResponderIncidentDetailsScreen() {
           </View>
         )}
 
+        {/* Hospital Info Card - shown when arrived or transporting */}
+        {hospitalRoute && (dispatch?.status === 'arrived' || dispatch?.status === 'transporting_to_hospital') && (
+          <View style={styles.hospitalCard}>
+            <View style={styles.hospitalCardHeader}>
+              <Ionicons name="medical" size={24} color="#3B82F6" />
+              <Text style={styles.hospitalCardTitle}>Assigned Hospital</Text>
+            </View>
+            <Text style={styles.hospitalName}>{hospitalRoute.hospital.name}</Text>
+            <View style={styles.hospitalDetailRow}>
+              <Ionicons name="location" size={16} color={Colors.textSecondary} />
+              <Text style={styles.hospitalDetailText}>{hospitalRoute.hospital.address}</Text>
+            </View>
+            <View style={styles.hospitalDetailRow}>
+              <Ionicons name="navigate" size={16} color="#3B82F6" />
+              <Text style={[styles.hospitalDetailText, { color: '#3B82F6', fontWeight: '600' }]}>
+                {hospitalRoute.route.distance_text} • {hospitalRoute.route.duration_text}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.changeHospitalButton}
+              onPress={() => setShowHospitalModal(true)}
+            >
+              <Ionicons name="swap-horizontal" size={18} color={Colors.primary} />
+              <Text style={styles.changeHospitalText}>Change Hospital</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Timeline Section */}
         {dispatch && (
           <View style={styles.timelineSection}>
@@ -438,8 +525,18 @@ export default function ResponderIncidentDetailsScreen() {
               time={dispatch.completed_at ?? null}
               icon="checkmark-done"
               color="#10B981"
-              isLast={true}
+              isLast={!dispatch.cancelled_at}
             />
+
+            {dispatch.cancelled_at && (
+              <TimelineItem
+                label="Dispatch Cancelled"
+                time={dispatch.cancelled_at}
+                icon="close-circle"
+                color="#EF4444"
+                isLast={true}
+              />
+            )}
           </View>
         )}
 
@@ -464,6 +561,18 @@ export default function ResponderIncidentDetailsScreen() {
               </TouchableOpacity>
             ))}
           </View>
+        )}
+
+        {/* Cancel Dispatch Button */}
+        {canCancel && (
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={handleCancelDispatch}
+            disabled={isUpdating}
+          >
+            <Ionicons name="close-circle-outline" size={20} color="#EF4444" />
+            <Text style={styles.cancelButtonText}>Cancel Dispatch</Text>
+          </TouchableOpacity>
         )}
 
         {/* Other Action Buttons */}
@@ -525,6 +634,22 @@ export default function ResponderIncidentDetailsScreen() {
           onSuccess={(patients) => {
             console.log('[IncidentDetails] Pre-arrival info submitted:', patients.length, 'patient(s)');
             setPreArrivalData(patients);
+          }}
+        />
+      )}
+
+      {/* Hospital Selection Modal */}
+      {dispatch && incident && (
+        <HospitalSelectionModal
+          visible={showHospitalModal}
+          onClose={() => setShowHospitalModal(false)}
+          dispatchId={dispatch.id}
+          latitude={incident.latitude}
+          longitude={incident.longitude}
+          currentHospitalId={hospitalRoute?.hospital?.id}
+          onHospitalSelected={(newRoute) => {
+            console.log('[IncidentDetails] Hospital changed:', newRoute?.hospital?.name);
+            setHospitalRoute(newRoute);
           }}
         />
       )}
@@ -733,6 +858,76 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: '#10B981',
+  },
+  hospitalCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+    borderLeftWidth: 4,
+  },
+  hospitalCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  hospitalCardTitle: {
+    fontSize: FontSizes.sm,
+    fontWeight: '600',
+    color: '#3B82F6',
+    textTransform: 'uppercase',
+  },
+  hospitalName: {
+    fontSize: FontSizes.lg,
+    fontWeight: 'bold',
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
+  },
+  hospitalDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: 4,
+  },
+  hospitalDetailText: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    flex: 1,
+  },
+  changeHospitalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    borderRadius: BorderRadius.sm,
+  },
+  changeHospitalText: {
+    fontSize: FontSizes.sm,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  cancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    borderRadius: BorderRadius.md,
+  },
+  cancelButtonText: {
+    fontSize: FontSizes.sm,
+    fontWeight: '600',
+    color: '#EF4444',
   },
 });
 

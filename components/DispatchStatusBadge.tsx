@@ -34,8 +34,10 @@ export const DispatchStatusBadge: React.FC<DispatchStatusBadgeProps> = ({
         return { label: 'TRANSPORTING', color: '#3B82F6' };
       case 'completed':
         return { label: 'COMPLETED', color: '#10B981' };
+      case 'cancelled':
+        return { label: 'CANCELLED', color: '#6B7280' };
       default:
-        return { label: status.toUpperCase(), color: '#6B7280' };
+        return { label: (status as string).toUpperCase(), color: '#6B7280' };
     }
   };
 

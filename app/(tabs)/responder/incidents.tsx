@@ -56,8 +56,14 @@ export default function ResponderIncidentsScreen() {
         return '#F59E0B'; // Orange
       case 'arrived':
         return '#8B5CF6'; // Purple
+      case 'transporting_to_hospital':
+        return '#3B82F6'; // Blue
       case 'completed':
         return '#10B981'; // Green
+      case 'cancelled':
+        return '#6B7280'; // Gray
+      case 'declined':
+        return '#6B7280'; // Gray
       default:
         return '#6B7280'; // Gray
     }
@@ -73,12 +79,16 @@ export default function ResponderIncidentsScreen() {
         return 'EN ROUTE';
       case 'arrived':
         return 'ON SCENE';
+      case 'transporting_to_hospital':
+        return 'TRANSPORTING';
       case 'completed':
         return 'COMPLETED';
       case 'declined':
         return 'DECLINED';
+      case 'cancelled':
+        return 'CANCELLED';
       default:
-        return status.toUpperCase();
+        return (status as string).toUpperCase();
     }
   };
 

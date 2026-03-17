@@ -20,6 +20,7 @@ export type ResponderStatus = 'idle' | 'busy' | 'offline';
 /**
  * Dispatch status lifecycle
  * assigned -> accepted/declined -> en_route -> arrived -> transporting_to_hospital -> completed
+ * Any active status can also transition to cancelled.
  */
 export type DispatchStatus =
   | 'assigned'                    // Admin assigned responder to incident
@@ -28,7 +29,8 @@ export type DispatchStatus =
   | 'en_route'                    // Responder is on the way
   | 'arrived'                     // Responder arrived at scene
   | 'transporting_to_hospital'    // Responder is transporting patient to hospital
-  | 'completed';                  // Incident resolved
+  | 'completed'                   // Incident resolved
+  | 'cancelled';                  // Dispatch cancelled
 
 /**
  * Dispatch assignment with incident details
@@ -49,6 +51,7 @@ export interface Dispatch {
   arrived_at?: string | null;
   transporting_to_hospital_at?: string | null;
   completed_at?: string | null;
+  cancelled_at?: string | null;
   created_at: string;
   updated_at: string;
 
@@ -99,6 +102,7 @@ export interface DutyStatusResponse {
     responder_status: ResponderStatus;
     duty_started_at?: string | null;
     duty_ended_at?: string | null;
+    last_active_at?: string | null;
   };
 }
 
@@ -123,7 +127,7 @@ export interface LocationUpdateResponse {
 }
 
 /**
- * Nearby incident (pending, within 3km)
+ * Nearby incident (pending, within 1km)
  */
 export interface NearbyIncident {
   incident_id: number;
@@ -307,4 +311,34 @@ export interface HospitalRouteData {
 export interface GetHospitalRouteResponse {
   hospital: Hospital;
   route: RouteInfo;
+}
+
+/**
+ * Assign hospital request
+ */
+export interface AssignHospitalRequest {
+  hospital_id: number;
+}
+
+/**
+ * Assign hospital response
+ */
+export interface AssignHospitalResponse {
+  message: string;
+  hospital_route: HospitalRouteData;
+}
+
+/**
+ * Nearby hospital (hospital with distance info)
+ */
+export interface NearbyHospital extends Hospital {
+  distance_meters: number;
+  distance_text: string;
+}
+
+/**
+ * Nearby hospitals response
+ */
+export interface NearbyHospitalsResponse {
+  hospitals: NearbyHospital[];
 }

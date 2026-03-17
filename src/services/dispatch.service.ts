@@ -23,6 +23,8 @@ import {
   MultiPatientPreArrivalRequest,
   MultiPatientPreArrivalResponse,
   GetHospitalRouteResponse,
+  AssignHospitalResponse,
+  NearbyHospitalsResponse,
 } from '@/src/types/dispatch.types';
 
 /**
@@ -297,6 +299,87 @@ export const acceptNearbyIncident = async (
       data: error.response?.data || error.message,
       incidentId,
       timestamp: new Date().toISOString(),
+    });
+    throw error;
+  }
+};
+
+/**
+ * Get hospital route for dispatch
+ * GET /api/responder/dispatches/:dispatchId/hospital-route
+ */
+/**
+ * Assign a hospital to a dispatch
+ * POST /api/responder/dispatches/:dispatchId/assign-hospital
+ */
+export const assignHospital = async (
+  dispatchId: number,
+  hospitalId: number
+): Promise<AssignHospitalResponse> => {
+  try {
+    console.log('[Dispatch Service] Assigning hospital:', {
+      dispatchId,
+      hospitalId,
+      timestamp: new Date().toISOString()
+    });
+
+    const response = await api.post<AssignHospitalResponse>(
+      `/responder/dispatches/${dispatchId}/assign-hospital`,
+      { hospital_id: hospitalId }
+    );
+
+    console.log('[Dispatch Service] Hospital assigned successfully:', {
+      hospitalName: response.data.hospital_route?.hospital?.name,
+    });
+
+    return response.data;
+  } catch (error: any) {
+    console.error('[Dispatch Service] Assign hospital error:', {
+      status: error.response?.status,
+      data: error.response?.data || error.message,
+      dispatchId,
+      hospitalId,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+};
+
+/**
+ * Get nearby hospitals
+ * GET /api/hospitals/nearby?latitude=X&longitude=Y&radius=Z
+ */
+export const getNearbyHospitals = async (
+  latitude: number,
+  longitude: number,
+  radius?: number
+): Promise<NearbyHospitalsResponse> => {
+  try {
+    console.log('[Dispatch Service] Fetching nearby hospitals:', {
+      latitude,
+      longitude,
+      radius,
+      timestamp: new Date().toISOString()
+    });
+
+    const params: Record<string, any> = { latitude, longitude };
+    if (radius) params.radius = radius;
+
+    const response = await api.get<NearbyHospitalsResponse>(
+      '/hospitals/nearby',
+      { params }
+    );
+
+    console.log('[Dispatch Service] Nearby hospitals fetched:', {
+      count: response.data.hospitals?.length || 0,
+    });
+
+    return response.data;
+  } catch (error: any) {
+    console.error('[Dispatch Service] Get nearby hospitals error:', {
+      status: error.response?.status,
+      data: error.response?.data || error.message,
+      timestamp: new Date().toISOString()
     });
     throw error;
   }
