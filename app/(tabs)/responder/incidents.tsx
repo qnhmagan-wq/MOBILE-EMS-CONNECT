@@ -183,11 +183,6 @@ export default function ResponderIncidentsScreen() {
           <Text style={styles.emptyText}>
             Pull down to refresh. You will receive a notification when assigned to an emergency.
           </Text>
-          {lastPollResult && (
-            <Text style={styles.pollDiagnosticText} selectable>
-              Poll: {lastPollResult}
-            </Text>
-          )}
         </ScrollView>
       ) : (
         <ScrollView
