@@ -9,6 +9,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useIncidents } from '@/src/hooks/useIncidents';
 import UnreadBadge from '@/components/UnreadBadge';
@@ -18,12 +19,15 @@ import { Colors, Spacing, BorderRadius, FontSizes } from '@/src/config/theme';
 
 export default function MessagesScreen() {
   const router = useRouter();
+  const isFocused = useIsFocused();
   const { incidents, loadIncidents, isLoading } = useIncidents();
   const [activeIncidents, setActiveIncidents] = useState<Incident[]>([]);
 
   useEffect(() => {
-    loadIncidents();
-  }, []);
+    if (isFocused) {
+      loadIncidents();
+    }
+  }, [isFocused]);
 
   useEffect(() => {
     // Filter to show only active incidents (pending, dispatched, in_progress)
