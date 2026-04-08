@@ -463,13 +463,6 @@ export default function ResponderIncidentDetailsScreen() {
                 {hospitalRoute.route.distance_text} • {hospitalRoute.route.duration_text}
               </Text>
             </View>
-            <TouchableOpacity
-              style={styles.changeHospitalButton}
-              onPress={() => setShowHospitalModal(true)}
-            >
-              <Ionicons name="swap-horizontal" size={18} color={Colors.primary} />
-              <Text style={styles.changeHospitalText}>Change Hospital</Text>
-            </TouchableOpacity>
           </View>
         )}
 
