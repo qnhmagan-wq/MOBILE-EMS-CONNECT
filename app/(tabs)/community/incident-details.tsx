@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -26,7 +26,7 @@ export default function IncidentDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
 
-  const fetchIncident = async () => {
+  const fetchIncident = useCallback(async () => {
     if (!incidentId) return;
 
     try {
@@ -38,7 +38,7 @@ export default function IncidentDetailsScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [incidentId]);
 
   useEffect(() => {
     fetchIncident();
@@ -46,7 +46,7 @@ export default function IncidentDetailsScreen() {
     // Poll for updates every 10 seconds
     const interval = setInterval(fetchIncident, 10000);
     return () => clearInterval(interval);
-  }, [incidentId]);
+  }, [fetchIncident]);
 
   const handleCancel = async () => {
     if (!incident || !incidentId) return;
@@ -308,6 +308,11 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: "center",
     alignItems: "center",
+  },
+  backButtonText: {
+    fontSize: FontSizes.md,
+    fontWeight: "600",
+    color: Colors.primary,
   },
   headerTitle: {
     fontSize: FontSizes.lg,
