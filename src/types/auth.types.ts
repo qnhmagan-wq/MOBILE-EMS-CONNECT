@@ -56,6 +56,17 @@ export interface LoginResponse {
   role: UserRole;
 }
 
+/**
+ * Response when first-login email verification is required (HTTP 200).
+ * Responders get this on their very first login — no token is included.
+ */
+export interface FirstLoginVerificationResponse {
+  message: string;
+  requires_verification: true;
+  is_first_login: true;
+  email: string;
+}
+
 export interface SignupResponse {
   message: string;
   email: string;
@@ -70,7 +81,7 @@ export interface VerificationResponse {
 }
 
 export interface AuthContextType extends AuthState {
-  login: (credentials: LoginCredentials) => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<LoginResponse | FirstLoginVerificationResponse>;
   signup: (credentials: SignupCredentials) => Promise<void>;
   verifyEmail: (credentials: VerificationCredentials) => Promise<void>;
   resendVerificationCode: (credentials: ResendVerificationCredentials) => Promise<void>;

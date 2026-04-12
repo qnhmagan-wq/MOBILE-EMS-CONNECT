@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  TextInput,
   ActivityIndicator,
   Alert,
   SafeAreaView,
@@ -25,6 +26,11 @@ export default function IncidentDetailsScreen() {
   const [incident, setIncident] = useState<Incident | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Feedback state
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
 
   const fetchIncident = useCallback(async () => {
     if (!incidentId) return;
@@ -78,6 +84,34 @@ export default function IncidentDetailsScreen() {
         },
       ]
     );
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!incident || feedbackRating === 0) return;
+
+    setIsSubmittingFeedback(true);
+    try {
+      const response = await incidentService.submitFeedback(incident.id, {
+        rating: feedbackRating,
+        comment: feedbackComment.trim() || null,
+      });
+
+      // Update local incident state with submitted feedback
+      setIncident({
+        ...incident,
+        feedback: response.feedback,
+        can_submit_feedback: false,
+      });
+      setFeedbackRating(0);
+      setFeedbackComment("");
+
+      Alert.alert("Thank You!", "Your feedback has been submitted successfully.");
+    } catch (error: any) {
+      const message = error.response?.data?.message || "Failed to submit feedback. Please try again.";
+      Alert.alert("Error", message);
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -244,6 +278,91 @@ export default function IncidentDetailsScreen() {
             )}
           </View>
         </View>
+
+        {/* Feedback — submitted (read-only) */}
+        {(() => {
+          const fb = incident.feedback;
+          if (!fb) return null;
+          return (
+            <View style={styles.feedbackCard}>
+              <View style={styles.feedbackHeader}>
+                <Ionicons name="checkmark-circle" size={20} color={Colors.success} />
+                <Text style={styles.feedbackHeaderText}>Thank you for your feedback</Text>
+              </View>
+              <View style={styles.starsRow}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Ionicons
+                    key={star}
+                    name={star <= fb.rating ? "star" : "star-outline"}
+                    size={24}
+                    color={star <= fb.rating ? "#F59E0B" : "#D1D5DB"}
+                  />
+                ))}
+              </View>
+              {fb.comment && (
+                <Text style={styles.feedbackCommentReadonly}>{fb.comment}</Text>
+              )}
+            </View>
+          );
+        })()}
+
+        {/* Feedback — submit form */}
+        {!incident.feedback && incident.can_submit_feedback && (
+          <View style={styles.feedbackCard}>
+            <View style={styles.feedbackHeader}>
+              <Ionicons name="star" size={20} color="#F59E0B" />
+              <Text style={styles.feedbackHeaderText}>How was your experience?</Text>
+            </View>
+            <Text style={styles.feedbackHint}>Your feedback helps improve emergency response</Text>
+
+            {/* Star Rating */}
+            <View style={styles.starsRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity
+                  key={star}
+                  onPress={() => setFeedbackRating(star)}
+                  disabled={isSubmittingFeedback}
+                >
+                  <Ionicons
+                    name={star <= feedbackRating ? "star" : "star-outline"}
+                    size={36}
+                    color={star <= feedbackRating ? "#F59E0B" : "#D1D5DB"}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Comment */}
+            <TextInput
+              style={styles.feedbackInput}
+              value={feedbackComment}
+              onChangeText={setFeedbackComment}
+              placeholder="Share your experience... (optional)"
+              placeholderTextColor={Colors.textLight}
+              multiline
+              numberOfLines={3}
+              maxLength={1000}
+              editable={!isSubmittingFeedback}
+              textAlignVertical="top"
+            />
+
+            {/* Submit */}
+            <TouchableOpacity
+              style={[styles.feedbackSubmitButton, (feedbackRating === 0 || isSubmittingFeedback) && styles.feedbackSubmitDisabled]}
+              onPress={handleSubmitFeedback}
+              disabled={feedbackRating === 0 || isSubmittingFeedback}
+            >
+              {isSubmittingFeedback ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="send" size={18} color="#fff" />
+                  <Text style={styles.feedbackSubmitText}>Submit Feedback</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Cancel Button (only for pending/dispatched) */}
         {["pending", "dispatched"].includes(incident.status) && (
@@ -442,6 +561,71 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     fontWeight: "600",
     color: Colors.responderPrimary,
+  },
+  // Feedback styles
+  feedbackCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+    borderLeftWidth: 4,
+  },
+  feedbackHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  feedbackHeaderText: {
+    fontSize: FontSizes.md,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  feedbackHint: {
+    fontSize: FontSizes.xs,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.md,
+  },
+  starsRow: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    marginBottom: Spacing.md,
+  },
+  feedbackInput: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    fontSize: FontSizes.sm,
+    color: Colors.textPrimary,
+    minHeight: 80,
+    backgroundColor: "#F9FAFB",
+    marginBottom: Spacing.md,
+  },
+  feedbackSubmitButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+  },
+  feedbackSubmitDisabled: {
+    opacity: 0.5,
+  },
+  feedbackSubmitText: {
+    color: "#fff",
+    fontSize: FontSizes.md,
+    fontWeight: "600",
+  },
+  feedbackCommentReadonly: {
+    fontSize: FontSizes.sm,
+    color: Colors.textPrimary,
+    lineHeight: 22,
+    fontStyle: "italic",
   },
 });
 

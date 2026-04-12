@@ -25,6 +25,8 @@ import {
   GetHospitalRouteResponse,
   AssignHospitalResponse,
   NearbyHospitalsResponse,
+  IncidentReportRequest,
+  IncidentReportResponse,
 } from '@/src/types/dispatch.types';
 
 /**
@@ -329,7 +331,7 @@ export const assignHospital = async (
     );
 
     console.log('[Dispatch Service] Hospital assigned successfully:', {
-      hospitalName: response.data.hospital_route?.hospital?.name,
+      hospitalName: response.data.dispatch?.hospital?.name,
     });
 
     return response.data;
@@ -415,6 +417,40 @@ export const getHospitalRoute = async (
       data: error.response?.data || error.message,
       dispatchId,
       timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+};
+
+/**
+ * Submit or update incident report (on-scene assessment)
+ * POST /api/responder/dispatches/:dispatchId/incident-report
+ * Upsert: submitting again updates the existing report
+ */
+export const submitIncidentReport = async (
+  dispatchId: number,
+  request: IncidentReportRequest
+): Promise<IncidentReportResponse> => {
+  try {
+    console.log('[Dispatch Service] Submitting incident report:', {
+      dispatchId,
+      validity: request.incident_validity,
+      timestamp: new Date().toISOString(),
+    });
+
+    const response = await api.post<IncidentReportResponse>(
+      `/responder/dispatches/${dispatchId}/incident-report`,
+      request
+    );
+
+    console.log('[Dispatch Service] Incident report submitted:', response.data.message);
+    return response.data;
+  } catch (error: any) {
+    console.error('[Dispatch Service] Submit incident report error:', {
+      status: error.response?.status,
+      data: error.response?.data || error.message,
+      dispatchId,
+      timestamp: new Date().toISOString(),
     });
     throw error;
   }

@@ -18,8 +18,23 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSizes } from '@/src/config/theme';
-import { NearbyHospital } from '@/src/types/dispatch.types';
+import { NearbyHospital, HospitalRouteData } from '@/src/types/dispatch.types';
 import * as dispatchService from '@/src/services/dispatch.service';
+
+/**
+ * Haversine distance calculation between two coordinates
+ */
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 interface HospitalSelectionModalProps {
   visible: boolean;
@@ -28,7 +43,7 @@ interface HospitalSelectionModalProps {
   latitude: number;
   longitude: number;
   currentHospitalId?: number;
-  onHospitalSelected: (hospitalRoute: any) => void;
+  onHospitalSelected: (hospitalRoute: HospitalRouteData | null) => void;
 }
 
 export const HospitalSelectionModal: React.FC<HospitalSelectionModalProps> = ({
@@ -56,7 +71,19 @@ export const HospitalSelectionModal: React.FC<HospitalSelectionModalProps> = ({
     setError(null);
     try {
       const response = await dispatchService.getNearbyHospitals(latitude, longitude);
-      setHospitals(response.hospitals || []);
+      // Compute distance client-side if backend doesn't include it
+      const hospitalsWithDistance = (response.hospitals || []).map((h) => {
+        if (h.distance_text) return h;
+        const distKm = calculateDistanceKm(latitude, longitude, h.latitude, h.longitude);
+        return {
+          ...h,
+          distance_meters: Math.round(distKm * 1000),
+          distance_text: distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`,
+        };
+      });
+      // Sort by distance (closest first)
+      hospitalsWithDistance.sort((a, b) => (a.distance_meters || 0) - (b.distance_meters || 0));
+      setHospitals(hospitalsWithDistance);
     } catch (err: any) {
       console.error('[HospitalSelection] Fetch error:', err);
       setError(err.response?.data?.message || 'Failed to load nearby hospitals.');
@@ -81,8 +108,27 @@ export const HospitalSelectionModal: React.FC<HospitalSelectionModalProps> = ({
           onPress: async () => {
             setIsAssigning(hospital.id);
             try {
-              const response = await dispatchService.assignHospital(dispatchId, hospital.id);
-              onHospitalSelected(response.hospital_route);
+              const assignResponse = await dispatchService.assignHospital(dispatchId, hospital.id);
+
+              // Fetch the updated route after assignment (assign clears cached route)
+              try {
+                const routeData = await dispatchService.getHospitalRoute(dispatchId);
+                onHospitalSelected({ hospital: routeData.hospital, route: routeData.route });
+              } catch (routeErr: any) {
+                // Route fetch failed but hospital was assigned — show hospital info without route
+                console.warn('[HospitalSelection] Route fetch after assign:', routeErr.message);
+                const assignedHospital = assignResponse.dispatch?.hospital;
+                if (assignedHospital) {
+                  // Create a minimal HospitalRouteData with empty route so the card still shows
+                  onHospitalSelected({
+                    hospital: assignedHospital,
+                    route: { distance_meters: 0, duration_seconds: 0, distance_text: 'Calculating...', duration_text: 'Calculating...', coordinates: [], method: 'haversine' as const },
+                  });
+                } else {
+                  onHospitalSelected(null);
+                }
+                Alert.alert('Hospital Assigned', 'Hospital changed successfully. Route details will update shortly.');
+              }
               onClose();
             } catch (err: any) {
               console.error('[HospitalSelection] Assign error:', err);
@@ -128,9 +174,11 @@ export const HospitalSelectionModal: React.FC<HospitalSelectionModalProps> = ({
           <Text style={styles.hospitalAddress} numberOfLines={1}>
             {item.address}
           </Text>
-          <Text style={styles.hospitalDistance}>
-            {item.distance_text}
-          </Text>
+          {item.distance_text && (
+            <Text style={styles.hospitalDistance}>
+              {item.distance_text}
+            </Text>
+          )}
         </View>
         {isAssigning === item.id ? (
           <ActivityIndicator size="small" color={Colors.primary} />

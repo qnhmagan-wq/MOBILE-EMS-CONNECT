@@ -15,13 +15,14 @@ import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { Incident } from "@/src/types/incident.types";
-import { Dispatch, DispatchStatus, PreArrivalData, HospitalRouteData } from "@/src/types/dispatch.types";
+import { Dispatch, DispatchStatus, PreArrivalData, HospitalRouteData, IncidentReport } from "@/src/types/dispatch.types";
 import { DispatchStatusBadge } from "@/components/DispatchStatusBadge";
 import TimelineItem from "@/components/TimelineItem";
 import { getElapsedTime } from "@/src/utils/time";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PreArrivalModal } from "@/src/components/PreArrivalModal";
 import { HospitalSelectionModal } from "@/src/components/HospitalSelectionModal";
+import { IncidentReportModal } from "@/src/components/IncidentReportModal";
 import * as dispatchService from "@/src/services/dispatch.service";
 
 export default function ResponderIncidentDetailsScreen() {
@@ -36,12 +37,17 @@ export default function ResponderIncidentDetailsScreen() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [showPreArrivalModal, setShowPreArrivalModal] = useState(false);
   const [showHospitalModal, setShowHospitalModal] = useState(false);
+  const [showIncidentReportModal, setShowIncidentReportModal] = useState(false);
   const [preArrivalData, setPreArrivalData] = useState<PreArrivalData[]>([]);
   const [hospitalRoute, setHospitalRoute] = useState<HospitalRouteData | null>(null);
+  const [incidentReport, setIncidentReport] = useState<IncidentReport | null>(null);
   const isMounted = useRef(true); // Track if component is mounted
 
   // Helper to check if pre-arrival form should be available
   const canShowPreArrival = dispatch?.status === 'en_route' || dispatch?.status === 'arrived';
+
+  // Helper to check if incident report should be available (arrived, transporting, completed)
+  const canShowIncidentReport = dispatch && ['arrived', 'transporting_to_hospital', 'completed'].includes(dispatch.status);
 
   useEffect(() => {
     // Get incident data from dispatch context (no API call needed)
@@ -463,7 +469,80 @@ export default function ResponderIncidentDetailsScreen() {
                 {hospitalRoute.route.distance_text} • {hospitalRoute.route.duration_text}
               </Text>
             </View>
+            <TouchableOpacity
+              style={styles.changeHospitalButton}
+              onPress={() => setShowHospitalModal(true)}
+            >
+              <Ionicons name="swap-horizontal" size={16} color={Colors.primary} />
+              <Text style={styles.changeHospitalText}>Change Hospital</Text>
+            </TouchableOpacity>
           </View>
+        )}
+
+        {/* Change Hospital button — shown when no hospital route loaded yet */}
+        {!hospitalRoute && dispatch && ['arrived', 'transporting_to_hospital'].includes(dispatch.status) && incident && (
+          <TouchableOpacity
+            style={[styles.changeHospitalButton, { marginBottom: Spacing.md, borderColor: '#3B82F6' }]}
+            onPress={() => setShowHospitalModal(true)}
+          >
+            <Ionicons name="medical" size={16} color="#3B82F6" />
+            <Text style={[styles.changeHospitalText, { color: '#3B82F6' }]}>Select Hospital</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Incident Report Card - shown when arrived, transporting, or completed */}
+        {canShowIncidentReport && (
+          <TouchableOpacity
+            style={[
+              styles.incidentReportCard,
+              incidentReport && styles.incidentReportCardSubmitted,
+            ]}
+            onPress={() => setShowIncidentReportModal(true)}
+          >
+            <View style={styles.incidentReportCardHeader}>
+              <View style={styles.incidentReportIconContainer}>
+                <Ionicons
+                  name={incidentReport ? "checkmark-circle" : "document-text"}
+                  size={24}
+                  color={incidentReport ? Colors.success : Colors.primary}
+                />
+              </View>
+              <View style={styles.incidentReportCardContent}>
+                <Text style={styles.incidentReportCardTitle}>
+                  {incidentReport ? 'Edit Incident Report' : 'Submit Incident Report'}
+                </Text>
+                <Text style={styles.incidentReportCardSubtitle}>
+                  {incidentReport
+                    ? `${incidentReport.incident_validity.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}${incidentReport.severity_assessment ? ' — ' + incidentReport.severity_assessment.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) : ''}`
+                    : 'Please submit your on-scene assessment'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+            </View>
+            {incidentReport && (
+              <View style={styles.incidentReportBadgeRow}>
+                <View style={[
+                  styles.validityBadge,
+                  { backgroundColor: getValidityColor(incidentReport.incident_validity) + '20' },
+                ]}>
+                  <View style={[styles.validityDot, { backgroundColor: getValidityColor(incidentReport.incident_validity) }]} />
+                  <Text style={[styles.validityBadgeText, { color: getValidityColor(incidentReport.incident_validity) }]}>
+                    {incidentReport.incident_validity.replace('_', ' ').toUpperCase()}
+                  </Text>
+                </View>
+                {incidentReport.severity_assessment && (
+                  <View style={[
+                    styles.validityBadge,
+                    { backgroundColor: getSeverityColor(incidentReport.severity_assessment) + '20' },
+                  ]}>
+                    <Text style={[styles.validityBadgeText, { color: getSeverityColor(incidentReport.severity_assessment) }]}>
+                      {incidentReport.severity_assessment.replace('_', ' ').toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </TouchableOpacity>
         )}
 
         {/* Timeline Section */}
@@ -646,9 +725,50 @@ export default function ResponderIncidentDetailsScreen() {
           }}
         />
       )}
+
+      {/* Incident Report Modal */}
+      {dispatch && (
+        <IncidentReportModal
+          visible={showIncidentReportModal}
+          onClose={() => setShowIncidentReportModal(false)}
+          dispatchId={dispatch.id}
+          existingReport={incidentReport}
+          onSuccess={(report) => {
+            console.log('[IncidentDetails] Incident report submitted:', report.incident_validity);
+            setIncidentReport(report);
+          }}
+        />
+      )}
     </SafeAreaView>
     </ErrorBoundary>
   );
+}
+
+/**
+ * Get color for incident validity
+ */
+function getValidityColor(validity: string): string {
+  switch (validity) {
+    case 'legitimate': return '#10B981';
+    case 'false_alarm': return '#EF4444';
+    case 'exaggerated': return '#F59E0B';
+    case 'uncertain': return '#6B7280';
+    default: return '#6B7280';
+  }
+}
+
+/**
+ * Get color for severity assessment
+ */
+function getSeverityColor(severity: string): string {
+  switch (severity) {
+    case 'critical': return '#EF4444';
+    case 'serious': return '#F97316';
+    case 'moderate': return '#F59E0B';
+    case 'minor': return '#3B82F6';
+    case 'non_emergency': return '#6B7280';
+    default: return '#6B7280';
+  }
 }
 
 const styles = StyleSheet.create({
@@ -921,6 +1041,72 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.sm,
     fontWeight: '600',
     color: '#EF4444',
+  },
+  // Incident Report Card
+  incidentReportCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    borderLeftWidth: 4,
+  },
+  incidentReportCardSubmitted: {
+    borderColor: Colors.success,
+  },
+  incidentReportCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  incidentReportIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  incidentReportCardContent: {
+    flex: 1,
+  },
+  incidentReportCardTitle: {
+    fontSize: FontSizes.md,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  incidentReportCardSubtitle: {
+    fontSize: FontSizes.xs,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  incidentReportBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  validityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
+  validityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  validityBadgeText: {
+    fontSize: FontSizes.xs,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });
 

@@ -79,8 +79,15 @@ export default function LoginScreen() {
     setIsLoading(true);
 
     try {
-      await login({ email: email.trim(), password });
-      // Navigation is handled automatically by AuthContext and _layout.tsx
+      const result = await login({ email: email.trim(), password });
+
+      // First-login verification required (responder first login — HTTP 200)
+      if ('requires_verification' in result && result.requires_verification) {
+        router.push(`/auth/verify?email=${encodeURIComponent(result.email)}`);
+        return;
+      }
+
+      // Normal login — navigation handled automatically by AuthContext and _layout.tsx
     } catch (error: any) {
       let errorMessage = "Login failed. Please try again.";
       let alertTitle = "Login Failed";
@@ -89,17 +96,24 @@ export default function LoginScreen() {
       if (error.response?.status === 422) {
         const responseData = error.response.data;
         const message = responseData.message || "";
-        
+
+        // Community user email not yet verified (HTTP 422 + requires_verification)
+        // Backend does not include email in this response — use the login form input
+        if (responseData.requires_verification) {
+          router.push(`/auth/verify?email=${encodeURIComponent(email.trim())}`);
+          return;
+        }
+
         // Check for inactive responder account
         if (message.includes("inactive") || message.includes("deactivated")) {
           errorMessage = "Your responder account has been deactivated. Please contact an administrator to reactivate your account.";
           alertTitle = "Account Inactive";
-        } 
+        }
         // Check for incorrect credentials or access denied
         else if (message.includes("incorrect") || message.includes("do not have access")) {
           errorMessage = "Invalid email or password. Please try again.";
           alertTitle = "Login Failed";
-        } 
+        }
         // Use the message from backend
         else {
           errorMessage = message;

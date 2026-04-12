@@ -23,6 +23,7 @@ export interface UseDispatchPollingReturn {
   startPolling: () => void;
   stopPolling: () => void;
   updateDispatchStatus: (dispatchId: number, status: DispatchStatus) => Promise<any>;
+  updateDispatchLocally: (dispatchId: number, updates: Partial<Dispatch>) => void;
   refreshDispatches: () => Promise<void>;
   retryNow: () => Promise<void>;
   clearError: () => void;
@@ -160,6 +161,23 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
   }, []);
 
   /**
+   * Update a dispatch's local state without an API call.
+   * Used when the server has already transitioned the status (e.g., auto-arrival).
+   */
+  const updateDispatchLocally = useCallback(
+    (dispatchId: number, updates: Partial<Dispatch>) => {
+      setDispatches((prev) =>
+        prev.map((dispatch) =>
+          dispatch.id === dispatchId
+            ? { ...dispatch, ...updates }
+            : dispatch
+        )
+      );
+    },
+    []
+  );
+
+  /**
    * Update dispatch status
    */
   const updateDispatchStatus = useCallback(
@@ -238,6 +256,7 @@ export const useDispatchPolling = (): UseDispatchPollingReturn => {
     startPolling,
     stopPolling,
     updateDispatchStatus,
+    updateDispatchLocally,
     refreshDispatches,
     retryNow,
     clearError,

@@ -5,6 +5,9 @@ import {
   GetIncidentsResponse,
   GetIncidentResponse,
   Incident,
+  SubmitFeedbackRequest,
+  SubmitFeedbackResponse,
+  GetFeedbackStatusResponse,
 } from '@/src/types/incident.types';
 
 /**
@@ -61,6 +64,37 @@ export const cancelIncident = async (id: number): Promise<{ message: string; inc
     return response.data;
   } catch (error: any) {
     console.error('[Incident Service] Cancel incident error:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+/**
+ * Submit feedback for a completed incident
+ * POST /api/incidents/:id/feedback
+ */
+export const submitFeedback = async (
+  id: number,
+  request: SubmitFeedbackRequest
+): Promise<SubmitFeedbackResponse> => {
+  try {
+    const response = await api.post<SubmitFeedbackResponse>(`/incidents/${id}/feedback`, request);
+    return response.data;
+  } catch (error: any) {
+    console.error('[Incident Service] Submit feedback error:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+/**
+ * Get feedback status for an incident
+ * GET /api/incidents/:id/feedback
+ */
+export const getFeedbackStatus = async (id: number): Promise<GetFeedbackStatusResponse> => {
+  try {
+    const response = await api.get<GetFeedbackStatusResponse>(`/incidents/${id}/feedback`);
+    return response.data;
+  } catch (error: any) {
+    console.error('[Incident Service] Get feedback status error:', error.response?.data || error.message);
     throw error;
   }
 };

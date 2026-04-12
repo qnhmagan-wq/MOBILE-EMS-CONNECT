@@ -15,6 +15,17 @@ export type IncidentStatus =
   | 'completed'    // Emergency resolved
   | 'cancelled';   // User cancelled
 
+/**
+ * Post-incident feedback from community user
+ */
+export interface IncidentFeedback {
+  id: number;
+  incident_id: number;
+  rating: number; // 1-5
+  comment: string | null;
+  created_at: string;
+}
+
 export interface Incident {
   id: number;
   type: IncidentType;
@@ -27,6 +38,8 @@ export interface Incident {
   updated_at?: string;
   dispatched_at?: string | null;
   completed_at?: string | null;
+  feedback?: IncidentFeedback | null;
+  can_submit_feedback?: boolean;
 }
 
 export interface CreateIncidentRequest {
@@ -48,6 +61,21 @@ export interface GetIncidentsResponse {
 
 export interface GetIncidentResponse {
   incident: Incident;
+}
+
+export interface SubmitFeedbackRequest {
+  rating: number;
+  comment?: string | null;
+}
+
+export interface SubmitFeedbackResponse {
+  message: string;
+  feedback: IncidentFeedback;
+}
+
+export interface GetFeedbackStatusResponse {
+  feedback: IncidentFeedback | null;
+  can_submit: boolean;
 }
 
 

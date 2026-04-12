@@ -47,12 +47,18 @@ export default function CommunityLayout() {
         }}
       />
       <Tabs.Screen
+        name="directory"
+        options={{
+          title: "Directory",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="business" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="first-aid"
         options={{
-          title: "First Aid",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="medical" size={size} color={color} />
-          ),
+          href: null, // Moved to hidden — accessible from Home
         }}
       />
       <Tabs.Screen

@@ -25,7 +25,8 @@ import {
 } from '@/src/services/backgroundLocation.service';
 import { useAuth } from './AuthContext';
 
-const LOCATION_UPDATE_INTERVAL = 15000; // 15 seconds (as per dev guide)
+const LOCATION_INTERVAL_EN_ROUTE = 8000; // 8 seconds when en_route (frequent for auto-arrival detection)
+const LOCATION_INTERVAL_DEFAULT = 30000; // 30 seconds otherwise (save battery)
 
 export interface DispatchContextType {
   // Location Tracking
@@ -79,6 +80,12 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // **FIX #2: Location interval ref for foreground updates**
   const locationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Auto-arrival: prevent duplicate processing of the same dispatch
+  const lastAutoArrivedDispatchRef = useRef<number | null>(null);
+
+  // Track current location interval for dynamic frequency adjustments
+  const currentIntervalRef = useRef<number>(LOCATION_INTERVAL_DEFAULT);
+
   // Use dispatch polling hook
   const {
     dispatches,
@@ -90,11 +97,18 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     startPolling,
     stopPolling,
     updateDispatchStatus: updateDispatchStatusHook,
+    updateDispatchLocally,
     refreshDispatches,
     retryNow,
     error: pollingError,
     clearError: clearPollingError,
   } = useDispatchPolling();
+
+  // Ref mirror of dispatches for use inside sendLocationUpdate (avoids stale closure)
+  const dispatchesRef = useRef<Dispatch[]>([]);
+  useEffect(() => {
+    dispatchesRef.current = dispatches;
+  }, [dispatches]);
 
   /**
    * Verify and log duty status response from backend.
@@ -153,6 +167,32 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setLocationLastSent(new Date());
         setIsBackendConfirmed(true);
         setLocationFailureCount(0);
+
+        // Handle auto-arrival: server detected responder is within 100m of incident
+        if (response.auto_arrived && response.auto_arrived.dispatch_id !== lastAutoArrivedDispatchRef.current) {
+          const { dispatch_id, incident_id, arrived_at } = response.auto_arrived;
+          lastAutoArrivedDispatchRef.current = dispatch_id;
+
+          console.log('[DispatchContext] Auto-arrival detected:', { dispatch_id, incident_id, arrived_at });
+
+          // Update local dispatch state immediately (server already transitioned status)
+          updateDispatchLocally(dispatch_id, {
+            status: 'arrived',
+            arrived_at: arrived_at,
+          });
+
+          // Show system notification (works even if user is in another app)
+          const targetDispatch = dispatchesRef.current.find(d => d.id === dispatch_id);
+          const address = targetDispatch?.incident?.address;
+          notificationService.showAutoArrivalNotification(dispatch_id, address);
+
+          // Show in-app alert
+          Alert.alert(
+            'Arrived at Incident',
+            'You have been automatically marked as arrived at the incident location.',
+            [{ text: 'OK' }]
+          );
+        }
       }
     } catch (error: any) {
       const statusCode = error.response?.status;
@@ -206,22 +246,25 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       }
     }
-  }, []);
+  }, [updateDispatchLocally]);
 
   /**
    * **FIX #2: Start periodic foreground location updates**
-   * Sends location every 15 seconds as fallback if background task fails
+   * Interval is dynamic: 8s when en_route (for auto-arrival), 30s otherwise
    */
   const startPeriodicLocationUpdates = useCallback(() => {
-    console.log('[DispatchContext] Starting periodic foreground location updates');
+    const hasEnRoute = dispatchesRef.current.some(d => d.status === 'en_route');
+    const interval = hasEnRoute ? LOCATION_INTERVAL_EN_ROUTE : LOCATION_INTERVAL_DEFAULT;
+
+    console.log(`[DispatchContext] Starting periodic foreground location updates (${interval}ms)`);
 
     // Clear any existing interval
     if (locationIntervalRef.current) {
       clearInterval(locationIntervalRef.current);
     }
 
-    // Send updates every 15 seconds
-    locationIntervalRef.current = setInterval(sendLocationUpdate, LOCATION_UPDATE_INTERVAL);
+    currentIntervalRef.current = interval;
+    locationIntervalRef.current = setInterval(sendLocationUpdate, interval);
   }, [sendLocationUpdate]);
 
   /**
@@ -512,6 +555,25 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     return () => clearInterval(heartbeat);
   }, [isTrackingActive, isBackendConfirmed]);
+
+  /**
+   * Dynamic location interval — adjust frequency based on dispatch status.
+   * 8s when any dispatch is en_route (for auto-arrival detection), 30s otherwise.
+   */
+  useEffect(() => {
+    if (!isTrackingActive || !locationIntervalRef.current) return;
+
+    const hasEnRoute = dispatches.some(d => d.status === 'en_route');
+    const newInterval = hasEnRoute ? LOCATION_INTERVAL_EN_ROUTE : LOCATION_INTERVAL_DEFAULT;
+
+    if (newInterval !== currentIntervalRef.current) {
+      console.log(`[DispatchContext] Adjusting location interval: ${currentIntervalRef.current}ms -> ${newInterval}ms`);
+      currentIntervalRef.current = newInterval;
+
+      clearInterval(locationIntervalRef.current);
+      locationIntervalRef.current = setInterval(sendLocationUpdate, newInterval);
+    }
+  }, [isTrackingActive, dispatches, sendLocationUpdate]);
 
   const value: DispatchContextType = {
     isTrackingActive,

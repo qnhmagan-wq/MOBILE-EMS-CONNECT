@@ -56,6 +56,15 @@ export default function ResponderLayout() {
         }}
       />
       <Tabs.Screen
+        name="directory"
+        options={{
+          title: "Directory",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="business" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",

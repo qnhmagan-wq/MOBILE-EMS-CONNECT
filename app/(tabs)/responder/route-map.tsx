@@ -275,6 +275,22 @@ export default function RouteMapScreen() {
   // before navigation to avoid race conditions with backend status validation
 
   /**
+   * Auto-navigate to incident-details when auto-arrival changes dispatch status to 'arrived'.
+   * Waits 2 seconds so the user can see the status change on the map screen.
+   */
+  useEffect(() => {
+    if (dispatch?.status === 'arrived' && incidentId && dispatchId) {
+      console.log('[Route Map] Auto-arrival detected, navigating to incident details in 2s...');
+      const timer = setTimeout(() => {
+        router.replace(
+          `/(tabs)/responder/incident-details?id=${incidentId}&dispatchId=${dispatchId}`
+        );
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [dispatch?.status, incidentId, dispatchId, router]);
+
+  /**
    * Handle "I've Arrived" button press
    * Includes defensive status check — if dispatch is still 'accepted' (en_route
    * transition may have silently failed), auto-recovers by updating to en_route first.
@@ -472,10 +488,19 @@ export default function RouteMapScreen() {
             showsVerticalScrollIndicator={true}
             bounces={false}
           >
-            {/* Status Badge */}
-            <View style={styles.statusBadge}>
-              <Ionicons name="navigate-circle" size={20} color="#fff" />
-              <Text style={styles.statusText}>EN ROUTE</Text>
+            {/* Status Badge - dynamic based on dispatch status */}
+            <View style={[
+              styles.statusBadge,
+              dispatch?.status === 'arrived' && styles.statusBadgeArrived,
+            ]}>
+              <Ionicons
+                name={dispatch?.status === 'arrived' ? 'checkmark-circle' : 'navigate-circle'}
+                size={20}
+                color="#fff"
+              />
+              <Text style={styles.statusText}>
+                {dispatch?.status === 'arrived' ? 'ARRIVED' : 'EN ROUTE'}
+              </Text>
             </View>
 
             {/* Incident Type */}
@@ -523,21 +548,28 @@ export default function RouteMapScreen() {
               <Text style={styles.externalNavButtonText}>Open in Google Maps</Text>
             </TouchableOpacity>
 
-            {/* I've Arrived Button */}
-            <TouchableOpacity
-              style={[styles.arrivedButton, isUpdatingStatus && styles.arrivedButtonDisabled]}
-              onPress={handleArrived}
-              disabled={isUpdatingStatus}
-            >
-              {isUpdatingStatus ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" size={24} color="#fff" />
-                  <Text style={styles.arrivedButtonText}>I&apos;ve Arrived</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {/* I've Arrived Button — hidden when already auto-arrived */}
+            {dispatch?.status === 'arrived' ? (
+              <View style={styles.arrivedConfirmation}>
+                <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
+                <Text style={styles.arrivedConfirmationText}>Arrived at scene</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.arrivedButton, isUpdatingStatus && styles.arrivedButtonDisabled]}
+                onPress={handleArrived}
+                disabled={isUpdatingStatus}
+              >
+                {isUpdatingStatus ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={24} color="#fff" />
+                    <Text style={styles.arrivedButtonText}>I&apos;ve Arrived</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </ScrollView>
         </View>
 
@@ -696,6 +728,9 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontWeight: '500',
   },
+  statusBadgeArrived: {
+    backgroundColor: Colors.success,
+  },
   arrivedButton: {
     backgroundColor: Colors.success,
     borderRadius: BorderRadius.md,
@@ -710,6 +745,22 @@ const styles = StyleSheet.create({
   },
   arrivedButtonText: {
     color: Colors.textWhite,
+    fontSize: FontSizes.md,
+    fontWeight: '600',
+  },
+  arrivedConfirmation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    backgroundColor: '#F0FDF4',
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.success,
+  },
+  arrivedConfirmationText: {
+    color: Colors.success,
     fontSize: FontSizes.md,
     fontWeight: '600',
   },

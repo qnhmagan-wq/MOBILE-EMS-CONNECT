@@ -8,6 +8,7 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { updateLocation, updateDutyStatus } from './dispatch.service';
+import { showAutoArrivalNotification } from './notification.service';
 
 const BACKGROUND_LOCATION_TASK = 'background-location-task';
 
@@ -34,11 +35,18 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
 
       try {
         // Send location to backend
-        await updateLocation({
+        const response = await updateLocation({
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
         });
         console.log('📍 [Background Location Task] Location updated successfully');
+
+        // Handle auto-arrival (server detected responder within 100m of incident)
+        if (response.auto_arrived) {
+          console.log('[Background Location Task] Auto-arrival detected:', response.auto_arrived);
+          showAutoArrivalNotification(response.auto_arrived.dispatch_id);
+          // Local dispatch state will reconcile on next foreground poll
+        }
       } catch (error: any) {
         const statusCode = error.response?.status;
 

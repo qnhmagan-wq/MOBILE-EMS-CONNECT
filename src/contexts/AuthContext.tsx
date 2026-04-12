@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  AuthContextType, 
-  User, 
-  UserRole, 
-  LoginCredentials, 
+import {
+  AuthContextType,
+  User,
+  UserRole,
+  LoginCredentials,
+  LoginResponse,
+  FirstLoginVerificationResponse,
   SignupCredentials,
   VerificationCredentials,
   ResendVerificationCredentials
@@ -38,12 +40,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = async (credentials: LoginCredentials) => {
+  const login = async (credentials: LoginCredentials): Promise<LoginResponse | FirstLoginVerificationResponse> => {
     try {
       const response = await authService.login(credentials);
-      setToken(response.token);
-      setUser(response.user);
-      setRole(response.role);
+
+      // First-login verification — don't set auth state (no token yet)
+      if ('requires_verification' in response && response.requires_verification) {
+        return response;
+      }
+
+      // Normal login — set auth state
+      const loginResponse = response as LoginResponse;
+      setToken(loginResponse.token);
+      setUser(loginResponse.user);
+      setRole(loginResponse.role);
+      return loginResponse;
     } catch (error) {
       throw error;
     }

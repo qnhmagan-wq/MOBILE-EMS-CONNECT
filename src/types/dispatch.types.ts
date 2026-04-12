@@ -115,6 +115,16 @@ export interface LocationUpdateRequest {
 }
 
 /**
+ * Auto-arrival data returned when responder is within 100m of incident
+ */
+export interface AutoArrivedData {
+  dispatch_id: number;
+  incident_id: number;
+  status: 'arrived';
+  arrived_at: string;
+}
+
+/**
  * Location update response
  */
 export interface LocationUpdateResponse {
@@ -124,6 +134,7 @@ export interface LocationUpdateResponse {
     longitude: number;
     updated_at: string;
   };
+  auto_arrived?: AutoArrivedData;
 }
 
 /**
@@ -322,18 +333,26 @@ export interface AssignHospitalRequest {
 
 /**
  * Assign hospital response
+ * Note: Returns dispatch with hospital info, not full route data.
+ * Call getHospitalRoute() separately to get the route after assignment.
  */
 export interface AssignHospitalResponse {
   message: string;
-  hospital_route: HospitalRouteData;
+  dispatch: {
+    id: number;
+    status: string;
+    hospital_id: number;
+    hospital: Hospital;
+  };
 }
 
 /**
- * Nearby hospital (hospital with distance info)
+ * Nearby hospital (hospital with optional distance info)
+ * Note: distance fields may not be returned by backend — calculate client-side if missing
  */
 export interface NearbyHospital extends Hospital {
-  distance_meters: number;
-  distance_text: string;
+  distance_meters?: number;
+  distance_text?: string;
 }
 
 /**
@@ -341,4 +360,50 @@ export interface NearbyHospital extends Hospital {
  */
 export interface NearbyHospitalsResponse {
   hospitals: NearbyHospital[];
+}
+
+/**
+ * Incident validity assessment by responder
+ */
+export type IncidentValidity = 'legitimate' | 'false_alarm' | 'exaggerated' | 'uncertain';
+
+/**
+ * Severity assessment by responder
+ */
+export type SeverityAssessment = 'critical' | 'serious' | 'moderate' | 'minor' | 'non_emergency';
+
+/**
+ * Incident report request (on-scene assessment)
+ */
+export interface IncidentReportRequest {
+  incident_validity: IncidentValidity;
+  severity_assessment?: SeverityAssessment | null;
+  scene_description?: string | null;
+  remarks?: string | null;
+  additional_resources_needed?: boolean;
+  additional_resources_details?: string | null;
+}
+
+/**
+ * Incident report data (from API response)
+ */
+export interface IncidentReport {
+  id: number;
+  dispatch_id: number;
+  incident_id: number;
+  incident_validity: IncidentValidity;
+  severity_assessment: SeverityAssessment | null;
+  scene_description: string | null;
+  remarks: string | null;
+  additional_resources_needed: boolean;
+  additional_resources_details: string | null;
+  submitted_at: string;
+}
+
+/**
+ * Incident report response
+ */
+export interface IncidentReportResponse {
+  message: string;
+  report: IncidentReport;
 }

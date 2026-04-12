@@ -197,6 +197,33 @@ const getIncidentTypeLabel = (type: string): string => {
 };
 
 /**
+ * Show notification for auto-arrival at incident location
+ */
+export const showAutoArrivalNotification = async (
+  dispatchId: number,
+  incidentAddress?: string
+): Promise<void> => {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Arrived at Incident',
+        body: incidentAddress
+          ? `You have arrived at the incident location: ${incidentAddress}`
+          : 'You have arrived at the incident location',
+        data: { dispatchId, type: 'auto_arrival' },
+        sound: 'default',
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
+      trigger: null, // Show immediately
+    });
+
+    console.log('[Notification Service] Auto-arrival notification shown for dispatch:', dispatchId);
+  } catch (error: any) {
+    console.error('[Notification Service] Auto-arrival notification error:', error.message);
+  }
+};
+
+/**
  * Check if notification permissions are granted
  */
 export const hasNotificationPermission = async (): Promise<boolean> => {

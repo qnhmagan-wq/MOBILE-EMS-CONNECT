@@ -1,26 +1,34 @@
 import api from './api';
-import { 
-  LoginCredentials, 
-  LoginResponse, 
-  SignupCredentials, 
-  SignupResponse, 
+import {
+  LoginCredentials,
+  LoginResponse,
+  FirstLoginVerificationResponse,
+  SignupCredentials,
+  SignupResponse,
   VerificationCredentials,
   VerificationResponse,
   ResendVerificationCredentials,
-  User 
+  User
 } from '@/src/types/auth.types';
 import { saveToken, saveUser, saveRole, getUser, clearAll } from './storage.service';
 
-export const login = async (credentials: LoginCredentials): Promise<LoginResponse> => {
+export const login = async (credentials: LoginCredentials): Promise<LoginResponse | FirstLoginVerificationResponse> => {
   try {
-    const response = await api.post<LoginResponse>('/auth/login', credentials);
-    const { token, user, role } = response.data;
+    const response = await api.post('/auth/login', credentials);
 
+    // First-login verification required (HTTP 200, no token)
+    if (response.data.requires_verification && response.data.is_first_login) {
+      console.log('[Auth Service] First-login verification required for:', response.data.email);
+      return response.data as FirstLoginVerificationResponse;
+    }
+
+    // Normal login — save credentials
+    const { token, user, role } = response.data;
     await saveToken(token);
     await saveUser(user);
     await saveRole(role);
 
-    return response.data;
+    return response.data as LoginResponse;
   } catch (error: any) {
     throw error;
   }
