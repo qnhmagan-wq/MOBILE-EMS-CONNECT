@@ -11,6 +11,7 @@ import {
   ResendVerificationCredentials
 } from '@/src/types/auth.types';
 import * as authService from '@/src/services/auth.service';
+import * as dispatchService from '@/src/services/dispatch.service';
 import { getToken, getUser, getRole } from '@/src/services/storage.service';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -90,6 +91,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
+      // Defense in depth: if the user is a responder, explicitly go off-duty
+      // before clearing auth. The token is still valid at this point, so the
+      // API call can authenticate. The server-side logout also handles this
+      // as a fallback, but calling it here ensures cleanup even if logout
+      // is interrupted.
+      if (role === 'responder') {
+        try {
+          await dispatchService.updateDutyStatus({
+            is_on_duty: false,
+            responder_status: 'offline',
+          });
+          console.log('[AuthContext] Responder set to off-duty before logout');
+        } catch (offDutyError) {
+          // Don't block logout — server-side logout handles this as fallback
+          console.warn('[AuthContext] Failed to go off-duty before logout (proceeding anyway):', offDutyError);
+        }
+      }
+
       await authService.logout();
       setToken(null);
       setUser(null);
