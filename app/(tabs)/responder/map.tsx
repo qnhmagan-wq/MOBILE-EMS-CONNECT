@@ -14,6 +14,8 @@ import { PROVIDER_GOOGLE, Marker, Region } from "react-native-maps";
 import DeferredMapView from "@/components/DeferredMapView";
 import * as Location from "expo-location";
 import * as locationService from "@/src/services/location.service";
+import * as stationService from "@/src/services/station.service";
+import { Station } from "@/src/types/station.types";
 import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
@@ -23,6 +25,7 @@ export default function MapOverviewScreen() {
   const { activeDispatches } = useDispatch();
 
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  const [stations, setStations] = useState<Station[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
@@ -72,6 +75,11 @@ export default function MapOverviewScreen() {
           setLocationFromUpdate(initialUpdate);
           setIsLoading(false);
           console.log('[Map Overview] Initial location:', initialUpdate);
+
+          // Fetch nearby stations (non-blocking)
+          stationService.getNearbyStations(initialUpdate.latitude, initialUpdate.longitude, 50)
+            .then((res) => { if (mountedRef.current) setStations(res.stations || []); })
+            .catch((err) => console.warn('[Map Overview] Failed to load stations:', err.message));
         }
       } catch (locErr: any) {
         console.warn('[Map Overview] getCurrentLocation failed, trying last known:', locErr.message);
@@ -190,6 +198,36 @@ export default function MapOverviewScreen() {
               tracksViewChanges={false}
             />
           ))}
+
+          {/* Fire Station Markers */}
+          {stations.filter(s => s.category === 'fire_station').map((station) => (
+            <Marker
+              key={`fire-${station.id}`}
+              coordinate={{ latitude: station.latitude, longitude: station.longitude }}
+              title={station.name}
+              description={`${station.type} — ${station.address}`}
+              tracksViewChanges={false}
+            >
+              <View style={styles.fireStationMarker}>
+                <Ionicons name="flame" size={16} color="#fff" />
+              </View>
+            </Marker>
+          ))}
+
+          {/* Police Station Markers */}
+          {stations.filter(s => s.category === 'police_station').map((station) => (
+            <Marker
+              key={`police-${station.id}`}
+              coordinate={{ latitude: station.latitude, longitude: station.longitude }}
+              title={station.name}
+              description={`${station.type} — ${station.address}`}
+              tracksViewChanges={false}
+            >
+              <View style={styles.policeStationMarker}>
+                <Ionicons name="shield" size={16} color="#fff" />
+              </View>
+            </Marker>
+          ))}
         </DeferredMapView>
 
         {/* Info Panel - Shows incident count */}
@@ -203,6 +241,11 @@ export default function MapOverviewScreen() {
           {activeDispatches.length === 0 && (
             <Text style={styles.noIncidentsText}>
               No active incidents at this time
+            </Text>
+          )}
+          {stations.length > 0 && (
+            <Text style={styles.noIncidentsText}>
+              {stations.filter(s => s.category === 'fire_station').length} fire station{stations.filter(s => s.category === 'fire_station').length !== 1 ? 's' : ''}, {stations.filter(s => s.category === 'police_station').length} police station{stations.filter(s => s.category === 'police_station').length !== 1 ? 's' : ''} nearby
             </Text>
           )}
         </View>
@@ -292,5 +335,35 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: Spacing.xs,
     fontStyle: 'italic',
+  },
+  fireStationMarker: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#ef4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  policeStationMarker: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#6366f1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
   },
 });

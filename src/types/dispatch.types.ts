@@ -271,6 +271,11 @@ export interface MultiPatientPreArrivalResponse {
 }
 
 /**
+ * Hospital type classification
+ */
+export type HospitalType = 'government' | 'private' | 'health_center';
+
+/**
  * Hospital information
  */
 export interface Hospital {
@@ -280,6 +285,8 @@ export interface Hospital {
   latitude: number;
   longitude: number;
   phone_number: string;
+  type?: HospitalType;
+  has_emergency_room?: boolean;
 }
 
 /**

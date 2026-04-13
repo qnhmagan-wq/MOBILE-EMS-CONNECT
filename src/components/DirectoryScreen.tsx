@@ -7,7 +7,6 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Linking,
   RefreshControl,
   SafeAreaView,
@@ -16,7 +15,9 @@ import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSizes } from '@/src/config/theme';
 import { NearbyHospital } from '@/src/types/dispatch.types';
+import { Station, StationCategory } from '@/src/types/station.types';
 import * as dispatchService from '@/src/services/dispatch.service';
+import * as stationService from '@/src/services/station.service';
 
 /**
  * Haversine distance between two coordinates in km
@@ -38,17 +39,31 @@ function formatDistance(km: number): string {
   return `${km.toFixed(1)} km`;
 }
 
+function getHospitalTypeInfo(type?: string): { color: string; bgColor: string; label: string } {
+  switch (type) {
+    case 'government':
+      return { color: '#22c55e', bgColor: '#f0fdf4', label: 'Government' };
+    case 'health_center':
+      return { color: '#f59e0b', bgColor: '#fffbeb', label: 'Health Center' };
+    case 'private':
+    default:
+      return { color: '#3b82f6', bgColor: '#eff6ff', label: 'Private' };
+  }
+}
+
 type DirectoryTab = 'hospitals' | 'fire_stations' | 'police_stations';
 
 const TABS: { key: DirectoryTab; label: string; icon: string; available: boolean }[] = [
   { key: 'hospitals', label: 'Hospitals', icon: 'medical', available: true },
-  { key: 'fire_stations', label: 'Fire Stations', icon: 'flame', available: false },
-  { key: 'police_stations', label: 'Police', icon: 'shield', available: false },
+  { key: 'fire_stations', label: 'Fire Stations', icon: 'flame', available: true },
+  { key: 'police_stations', label: 'Police', icon: 'shield', available: true },
 ];
 
 export default function DirectoryScreen() {
   const [activeTab, setActiveTab] = useState<DirectoryTab>('hospitals');
   const [hospitals, setHospitals] = useState<NearbyHospital[]>([]);
+  const [fireStations, setFireStations] = useState<Station[]>([]);
+  const [policeStations, setPoliceStations] = useState<Station[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -93,46 +108,92 @@ export default function DirectoryScreen() {
     }
   }, []);
 
+  const fetchStations = useCallback(async (
+    coords: { latitude: number; longitude: number },
+    category: StationCategory,
+    setter: React.Dispatch<React.SetStateAction<Station[]>>
+  ) => {
+    try {
+      setError(null);
+      const response = await stationService.getNearbyStations(coords.latitude, coords.longitude, 50, category);
+      const sorted = (response.stations || []).slice().sort((a, b) => a.distance - b.distance);
+      setter(sorted);
+    } catch (err: any) {
+      setError(err.response?.data?.message || `Failed to load nearby ${category === 'fire_station' ? 'fire stations' : 'police stations'}.`);
+    }
+  }, []);
+
+  const loadDataForTab = useCallback(async (tab: DirectoryTab, coords: { latitude: number; longitude: number }) => {
+    if (tab === 'hospitals') {
+      await fetchHospitals(coords);
+    } else if (tab === 'fire_stations') {
+      await fetchStations(coords, 'fire_station', setFireStations);
+    } else {
+      await fetchStations(coords, 'police_station', setPoliceStations);
+    }
+  }, [fetchHospitals, fetchStations]);
+
   const loadData = useCallback(async () => {
     setIsLoading(true);
     const coords = await fetchLocation();
     if (coords) {
-      await fetchHospitals(coords);
+      await loadDataForTab(activeTab, coords);
     }
     setIsLoading(false);
-  }, [fetchLocation, fetchHospitals]);
+  }, [fetchLocation, loadDataForTab, activeTab]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     const coords = userLocation || await fetchLocation();
     if (coords) {
-      await fetchHospitals(coords);
+      await loadDataForTab(activeTab, coords);
     }
     setIsRefreshing(false);
-  }, [userLocation, fetchLocation, fetchHospitals]);
+  }, [userLocation, fetchLocation, loadDataForTab, activeTab]);
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+  }, []);
 
-  // Client-side search filter
+  // Fetch data when switching tabs (if not already loaded)
+  useEffect(() => {
+    if (!userLocation) return;
+    const needsFetch =
+      (activeTab === 'hospitals' && hospitals.length === 0) ||
+      (activeTab === 'fire_stations' && fireStations.length === 0) ||
+      (activeTab === 'police_stations' && policeStations.length === 0);
+    if (needsFetch) {
+      setIsLoading(true);
+      loadDataForTab(activeTab, userLocation).finally(() => setIsLoading(false));
+    }
+  }, [activeTab]);
+
+  // Client-side search filters
   const filteredHospitals = hospitals.filter((h) => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
     return h.name.toLowerCase().includes(query) || h.address.toLowerCase().includes(query);
   });
 
+  const currentStations = activeTab === 'fire_stations' ? fireStations : policeStations;
+  const filteredStations = currentStations.filter((s) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return s.name.toLowerCase().includes(query) || s.address.toLowerCase().includes(query);
+  });
+
   const handleCall = (phoneNumber: string) => {
     Linking.openURL(`tel:${phoneNumber}`);
   };
 
-  const handleDirections = (hospital: NearbyHospital) => {
-    const url = `https://maps.google.com/maps/dir/?api=1&destination=${hospital.latitude},${hospital.longitude}&travelmode=driving`;
+  const handleDirections = (location: { latitude: number; longitude: number }) => {
+    const url = `https://maps.google.com/maps/dir/?api=1&destination=${location.latitude},${location.longitude}&travelmode=driving`;
     Linking.openURL(url);
   };
 
   const renderHospitalItem = ({ item }: { item: NearbyHospital }) => {
     const isExpanded = expandedId === item.id;
+    const typeInfo = getHospitalTypeInfo(item.type);
 
     return (
       <TouchableOpacity
@@ -141,16 +202,22 @@ export default function DirectoryScreen() {
         activeOpacity={0.7}
       >
         <View style={styles.hospitalHeader}>
-          <View style={styles.hospitalIcon}>
-            <Ionicons name="medical" size={22} color="#3B82F6" />
+          <View style={[styles.hospitalIcon, { backgroundColor: typeInfo.bgColor }]}>
+            <Ionicons name="medical" size={22} color={typeInfo.color} />
           </View>
           <View style={styles.hospitalInfo}>
             <Text style={styles.hospitalName} numberOfLines={isExpanded ? undefined : 1}>{item.name}</Text>
             <Text style={styles.hospitalAddress} numberOfLines={isExpanded ? undefined : 1}>{item.address}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: typeInfo.color }}>{typeInfo.label}</Text>
+              {item.has_emergency_room === false && (
+                <Text style={{ fontSize: 10, fontWeight: '600', color: '#f59e0b' }}>No ER</Text>
+              )}
+            </View>
           </View>
           {item.distance_text && (
-            <View style={styles.distanceBadge}>
-              <Text style={styles.distanceText}>{item.distance_text}</Text>
+            <View style={[styles.distanceBadge, { backgroundColor: typeInfo.bgColor }]}>
+              <Text style={[styles.distanceText, { color: typeInfo.color }]}>{item.distance_text}</Text>
             </View>
           )}
         </View>
@@ -194,6 +261,87 @@ export default function DirectoryScreen() {
     );
   };
 
+  const renderStationItem = ({ item }: { item: Station }) => {
+    const isExpanded = expandedId === item.id;
+    const isFireStation = item.category === 'fire_station';
+    const iconName = isFireStation ? 'flame' : 'shield';
+    const iconColor = isFireStation ? '#ef4444' : '#6366f1';
+    const iconBgColor = isFireStation ? '#fef2f2' : '#eef2ff';
+
+    return (
+      <TouchableOpacity
+        style={styles.hospitalCard}
+        onPress={() => setExpandedId(isExpanded ? null : item.id)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.hospitalHeader}>
+          <View style={[styles.hospitalIcon, { backgroundColor: iconBgColor }]}>
+            <Ionicons name={iconName} size={22} color={iconColor} />
+          </View>
+          <View style={styles.hospitalInfo}>
+            <Text style={styles.hospitalName} numberOfLines={isExpanded ? undefined : 1}>{item.name}</Text>
+            <Text style={styles.hospitalAddress} numberOfLines={isExpanded ? undefined : 1}>{item.address}</Text>
+            {item.type && (
+              <Text style={{ fontSize: 11, fontWeight: '600', color: iconColor, marginTop: 2 }}>
+                {item.type}
+              </Text>
+            )}
+          </View>
+          <View style={[styles.distanceBadge, { backgroundColor: iconBgColor }]}>
+            <Text style={[styles.distanceText, { color: iconColor }]}>
+              {formatDistance(item.distance)}
+            </Text>
+          </View>
+        </View>
+
+        {isExpanded && (
+          <View style={styles.expandedContent}>
+            {item.phone_number && (
+              <View style={styles.detailRow}>
+                <Ionicons name="call" size={16} color={Colors.textSecondary} />
+                <Text style={styles.detailText}>{item.phone_number}</Text>
+              </View>
+            )}
+            {item.notes && (
+              <View style={styles.detailRow}>
+                <Ionicons name="information-circle" size={16} color={Colors.textSecondary} />
+                <Text style={styles.detailText}>{item.notes}</Text>
+              </View>
+            )}
+            <View style={styles.detailRow}>
+              <Ionicons name="location" size={16} color={Colors.textSecondary} />
+              <Text style={styles.detailText}>
+                {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)}
+              </Text>
+            </View>
+
+            <View style={styles.actionButtons}>
+              {item.phone_number && (
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: isFireStation ? '#ef4444' : '#6366f1' }]}
+                  onPress={() => handleCall(item.phone_number)}
+                >
+                  <Ionicons name="call" size={18} color="#fff" />
+                  <Text style={styles.actionButtonText}>Call</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.actionButton, styles.directionsButton]}
+                onPress={() => handleDirections(item)}
+              >
+                <Ionicons name="navigate" size={18} color="#fff" />
+                <Text style={styles.actionButtonText}>Directions</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const loadingLabel = activeTab === 'hospitals' ? 'hospitals' : activeTab === 'fire_stations' ? 'fire stations' : 'police stations';
+  const isHospitalTab = activeTab === 'hospitals';
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -210,25 +358,21 @@ export default function DirectoryScreen() {
             style={[
               styles.tab,
               activeTab === tab.key && styles.tabActive,
-              !tab.available && styles.tabDisabled,
             ]}
             onPress={() => {
-              if (!tab.available) {
-                Alert.alert('Coming Soon', `${tab.label} directory will be available in a future update.`);
-                return;
-              }
+              setSearchQuery('');
+              setExpandedId(null);
               setActiveTab(tab.key);
             }}
           >
             <Ionicons
               name={tab.icon as any}
               size={16}
-              color={activeTab === tab.key ? '#fff' : tab.available ? Colors.textSecondary : Colors.textLight}
+              color={activeTab === tab.key ? '#fff' : Colors.textSecondary}
             />
             <Text style={[
               styles.tabText,
               activeTab === tab.key && styles.tabTextActive,
-              !tab.available && styles.tabTextDisabled,
             ]}>
               {tab.label}
             </Text>
@@ -259,9 +403,9 @@ export default function DirectoryScreen() {
       {isLoading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Finding nearby hospitals...</Text>
+          <Text style={styles.loadingText}>Finding nearby {loadingLabel}...</Text>
         </View>
-      ) : error && hospitals.length === 0 ? (
+      ) : error && (isHospitalTab ? hospitals.length === 0 : currentStations.length === 0) ? (
         <View style={styles.centered}>
           <Ionicons name="alert-circle" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{error}</Text>
@@ -269,7 +413,7 @@ export default function DirectoryScreen() {
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      ) : (
+      ) : isHospitalTab ? (
         <FlatList
           data={filteredHospitals}
           keyExtractor={(item) => item.id.toString()}
@@ -290,6 +434,30 @@ export default function DirectoryScreen() {
           ListHeaderComponent={
             <Text style={styles.resultCount}>
               {filteredHospitals.length} hospital{filteredHospitals.length !== 1 ? 's' : ''} found
+            </Text>
+          }
+        />
+      ) : (
+        <FlatList
+          data={filteredStations}
+          keyExtractor={(item) => `${item.category}-${item.id}`}
+          renderItem={renderStationItem}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[Colors.primary]} />
+          }
+          ListEmptyComponent={
+            <View style={styles.centered}>
+              <Ionicons name="search" size={48} color={Colors.textSecondary} />
+              <Text style={styles.emptyText}>
+                {searchQuery ? `No ${loadingLabel} match your search` : `No ${loadingLabel} found nearby`}
+              </Text>
+            </View>
+          }
+          ListHeaderComponent={
+            <Text style={styles.resultCount}>
+              {filteredStations.length} {loadingLabel.replace(/s$/, '')}{filteredStations.length !== 1 ? 's' : ''} found
             </Text>
           }
         />
@@ -392,7 +560,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Hospital card
+  // Hospital card (reused for stations)
   hospitalCard: {
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,

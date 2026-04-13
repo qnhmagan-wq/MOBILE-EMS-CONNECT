@@ -65,6 +65,11 @@ export const MARKER_COLORS = {
   currentLocation: 'blue',
   incident: 'red',
   responder: 'green',
+  fireStation: '#ef4444',
+  policeStation: '#6366f1',
+  hospitalGovernment: '#22c55e',
+  hospitalPrivate: '#3b82f6',
+  hospitalHealthCenter: '#f59e0b',
 };
 
 /**
