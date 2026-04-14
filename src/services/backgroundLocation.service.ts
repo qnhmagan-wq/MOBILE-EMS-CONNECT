@@ -63,11 +63,17 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
             console.log('✅ [Background Location Task] Status recovered - retrying location update');
 
             // Retry location update
-            await updateLocation({
+            const retryResponse = await updateLocation({
               latitude: location.coords.latitude,
               longitude: location.coords.longitude,
             });
             console.log('✅ [Background Location Task] Location update succeeded after recovery');
+
+            // Check for auto-arrival in retry response (previously dropped)
+            if (retryResponse.auto_arrived) {
+              console.log('[Background Location Task] Auto-arrival detected after recovery:', retryResponse.auto_arrived);
+              showAutoArrivalNotification(retryResponse.auto_arrived.dispatch_id);
+            }
           } catch (retryError: any) {
             console.error('❌ [Background Location Task] Failed to recover:', retryError.response?.data || retryError.message);
             // Don't throw - let task continue

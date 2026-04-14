@@ -11,7 +11,8 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { Alert, Platform, Linking } from 'react-native';
-import { DutyStatus, Dispatch, DispatchStatus, NearbyIncident } from '@/src/types/dispatch.types';
+import * as Notifications from 'expo-notifications';
+import { DutyStatus, Dispatch, DispatchStatus, NearbyIncident, AutoArrivedData } from '@/src/types/dispatch.types';
 import { useDispatchPolling } from '@/src/hooks/useDispatchPolling';
 import * as dispatchService from '@/src/services/dispatch.service';
 import * as locationService from '@/src/services/location.service';
@@ -148,6 +149,43 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   /**
+   * Handle auto-arrival detected from a location update response.
+   * Deduplicates by dispatch_id, updates local state, shows notification + alert,
+   * and fetches full server data.
+   */
+  const handleAutoArrival = useCallback((autoArrived: AutoArrivedData) => {
+    if (autoArrived.dispatch_id === lastAutoArrivedDispatchRef.current) {
+      return; // Already processed this dispatch
+    }
+
+    const { dispatch_id, incident_id, arrived_at } = autoArrived;
+    lastAutoArrivedDispatchRef.current = dispatch_id;
+
+    console.log('[DispatchContext] Auto-arrival detected:', { dispatch_id, incident_id, arrived_at });
+
+    // Update local dispatch state immediately (server already transitioned status)
+    updateDispatchLocally(dispatch_id, {
+      status: 'arrived',
+      arrived_at: arrived_at,
+    });
+
+    // Fetch complete server data so all fields are up to date
+    refreshDispatches();
+
+    // Show system notification (works even if user is in another app)
+    const targetDispatch = dispatchesRef.current.find(d => d.id === dispatch_id);
+    const address = targetDispatch?.incident?.address;
+    notificationService.showAutoArrivalNotification(dispatch_id, address);
+
+    // Show in-app alert
+    Alert.alert(
+      'Arrived at Incident',
+      'You have been automatically marked as arrived at the incident location.',
+      [{ text: 'OK' }]
+    );
+  }, [updateDispatchLocally, refreshDispatches]);
+
+  /**
    * **FIX #2 & #4: Send current location to backend with verification**
    * **FIX: Added 422 error recovery - sets duty status and retries**
    * Used for periodic foreground updates as fallback
@@ -169,29 +207,8 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setLocationFailureCount(0);
 
         // Handle auto-arrival: server detected responder is within 100m of incident
-        if (response.auto_arrived && response.auto_arrived.dispatch_id !== lastAutoArrivedDispatchRef.current) {
-          const { dispatch_id, incident_id, arrived_at } = response.auto_arrived;
-          lastAutoArrivedDispatchRef.current = dispatch_id;
-
-          console.log('[DispatchContext] Auto-arrival detected:', { dispatch_id, incident_id, arrived_at });
-
-          // Update local dispatch state immediately (server already transitioned status)
-          updateDispatchLocally(dispatch_id, {
-            status: 'arrived',
-            arrived_at: arrived_at,
-          });
-
-          // Show system notification (works even if user is in another app)
-          const targetDispatch = dispatchesRef.current.find(d => d.id === dispatch_id);
-          const address = targetDispatch?.incident?.address;
-          notificationService.showAutoArrivalNotification(dispatch_id, address);
-
-          // Show in-app alert
-          Alert.alert(
-            'Arrived at Incident',
-            'You have been automatically marked as arrived at the incident location.',
-            [{ text: 'OK' }]
-          );
+        if (response.auto_arrived) {
+          handleAutoArrival(response.auto_arrived);
         }
       }
     } catch (error: any) {
@@ -212,7 +229,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           // Retry location update
           const location = await locationService.getCurrentLocation();
           if (location) {
-            const response = await dispatchService.updateLocation({
+            const retryResponse = await dispatchService.updateLocation({
               latitude: location.latitude,
               longitude: location.longitude,
             });
@@ -220,6 +237,11 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             setLocationLastSent(new Date());
             setIsBackendConfirmed(true);
             setLocationFailureCount(0);
+
+            // Check for auto-arrival in retry response (previously dropped)
+            if (retryResponse.auto_arrived) {
+              handleAutoArrival(retryResponse.auto_arrived);
+            }
           }
         } catch (retryError: any) {
           console.error('❌ [DispatchContext] Failed to recover status:', retryError.response?.data || retryError.message);
@@ -246,7 +268,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       }
     }
-  }, [updateDispatchLocally]);
+  }, [updateDispatchLocally, handleAutoArrival]);
 
   /**
    * **FIX #2: Start periodic foreground location updates**
@@ -574,6 +596,36 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       locationIntervalRef.current = setInterval(sendLocationUpdate, newInterval);
     }
   }, [isTrackingActive, dispatches, sendLocationUpdate]);
+
+  /**
+   * Notification listener — bridges background location task auto-arrival to React state.
+   * When the background task detects auto-arrival, it fires a local notification with
+   * data.type === 'auto_arrival'. This listener catches it and updates dispatch state
+   * immediately, rather than waiting for the next poll cycle.
+   */
+  useEffect(() => {
+    if (!isTrackingActive) return;
+
+    const subscription = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data as { type?: string; dispatchId?: number };
+      if (data?.type === 'auto_arrival' && data.dispatchId) {
+        console.log('[DispatchContext] Auto-arrival notification received from background task:', data.dispatchId);
+
+        // Deduplication: foreground sendLocationUpdate may have already handled this
+        if (data.dispatchId === lastAutoArrivedDispatchRef.current) {
+          console.log('[DispatchContext] Auto-arrival already processed, skipping');
+          return;
+        }
+
+        // Update local state and fetch full server data
+        lastAutoArrivedDispatchRef.current = data.dispatchId;
+        updateDispatchLocally(data.dispatchId, { status: 'arrived' });
+        refreshDispatches();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [isTrackingActive, updateDispatchLocally, refreshDispatches]);
 
   const value: DispatchContextType = {
     isTrackingActive,
