@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Alert } from 'react-native';
 import {
   AuthContextType,
   User,
@@ -13,6 +14,60 @@ import {
 import * as authService from '@/src/services/auth.service';
 import * as dispatchService from '@/src/services/dispatch.service';
 import { getToken, getUser, getRole } from '@/src/services/storage.service';
+
+const OFF_DUTY_MAX_ATTEMPTS = 3;
+const OFF_DUTY_RETRY_DELAY_MS = 500;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Attempt to set the responder off-duty with retries, verifying the backend
+ * actually persisted `is_on_duty: false`. Returns true on confirmed success.
+ *
+ * - 401/403: the session is already gone; treat as success (no further cleanup possible).
+ * - BACKEND_500 / network / unverified response: retry with backoff.
+ * - All attempts exhausted: return false so the caller can decide how to proceed.
+ */
+const attemptOffDutyWithRetry = async (): Promise<boolean> => {
+  for (let attempt = 1; attempt <= OFF_DUTY_MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await dispatchService.updateDutyStatus({
+        is_on_duty: false,
+        responder_status: 'offline',
+      });
+
+      const serverIsOnDuty =
+        (response as any)?.status?.is_on_duty ??
+        (response as any)?.is_on_duty ??
+        (response as any)?.data?.is_on_duty;
+
+      if (serverIsOnDuty === false) {
+        console.log(`[AuthContext] Off-duty confirmed by backend (attempt ${attempt})`);
+        return true;
+      }
+
+      console.warn(
+        `[AuthContext] Off-duty response did not confirm is_on_duty:false (attempt ${attempt}):`,
+        response
+      );
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 401 || status === 403) {
+        console.warn('[AuthContext] Off-duty call unauthorized — session already invalid');
+        return true;
+      }
+      console.warn(
+        `[AuthContext] Off-duty attempt ${attempt} failed:`,
+        err?.response?.data || err?.message || err
+      );
+    }
+
+    if (attempt < OFF_DUTY_MAX_ATTEMPTS) {
+      await sleep(OFF_DUTY_RETRY_DELAY_MS * attempt);
+    }
+  }
+  return false;
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -89,33 +144,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = async () => {
+  const finalizeLogout = async () => {
     try {
-      // Defense in depth: if the user is a responder, explicitly go off-duty
-      // before clearing auth. The token is still valid at this point, so the
-      // API call can authenticate. The server-side logout also handles this
-      // as a fallback, but calling it here ensures cleanup even if logout
-      // is interrupted.
-      if (role === 'responder') {
-        try {
-          await dispatchService.updateDutyStatus({
-            is_on_duty: false,
-            responder_status: 'offline',
-          });
-          console.log('[AuthContext] Responder set to off-duty before logout');
-        } catch (offDutyError) {
-          // Don't block logout — server-side logout handles this as fallback
-          console.warn('[AuthContext] Failed to go off-duty before logout (proceeding anyway):', offDutyError);
-        }
-      }
-
       await authService.logout();
-      setToken(null);
-      setUser(null);
-      setRole(null);
-    } catch (error) {
-      console.error('Logout error:', error);
+    } catch (err) {
+      console.error('[AuthContext] authService.logout failed:', err);
     }
+    setToken(null);
+    setUser(null);
+    setRole(null);
+  };
+
+  const logout = async (options?: { force?: boolean }) => {
+    // Non-responders skip the duty-status dance entirely.
+    if (role !== 'responder') {
+      await finalizeLogout();
+      return;
+    }
+
+    const confirmed = await attemptOffDutyWithRetry();
+    if (confirmed || options?.force) {
+      await finalizeLogout();
+      return;
+    }
+
+    // Backend never confirmed off-duty. If we clear the token now, the responder
+    // will remain visible on the dispatch dashboard. Let the user decide.
+    Alert.alert(
+      'Could not confirm off-duty',
+      'The server did not confirm you went off-duty. You may still appear available on the dispatch dashboard. Log out anyway?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log out anyway',
+          style: 'destructive',
+          onPress: () => {
+            // Fire and forget — user chose to proceed despite server state.
+            logout({ force: true });
+          },
+        },
+      ]
+    );
   };
 
   useEffect(() => {

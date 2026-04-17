@@ -226,11 +226,41 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
    */
   const evaluateJourneyTransitions = useCallback(
     async (gps: { latitude: number; longitude: number }, canFirePosts: boolean) => {
-      const journey = activeJourneyRef.current;
-      if (!journey) return;
+      let journey = activeJourneyRef.current;
 
-      const dispatch = dispatchesRef.current.find((d) => d.id === journey.dispatchId);
+      // Pick the dispatch to evaluate: prefer the journey's dispatch, otherwise fall back
+      // to any in-flight dispatch. This lets us evaluate arrival even when the journey
+      // entry was never captured (e.g., GPS unavailable at accept time).
+      let dispatch = journey
+        ? dispatchesRef.current.find((d) => d.id === journey!.dispatchId)
+        : undefined;
+      if (!dispatch) {
+        dispatch = dispatchesRef.current.find(
+          (d) => d.status === 'accepted' || d.status === 'en_route'
+        );
+      }
       if (!dispatch) return;
+
+      // Lazy-capture accept origin if the accept path couldn't get a GPS fix in time.
+      // Without this, the en_route auto-transition would never fire for this dispatch.
+      if (!journey && dispatch.status === 'accepted' && canFirePosts) {
+        const entry: journeyState.JourneyEntry = {
+          dispatchId: dispatch.id,
+          acceptOriginLat: gps.latitude,
+          acceptOriginLon: gps.longitude,
+          acceptedAt: new Date().toISOString(),
+        };
+        activeJourneyRef.current = entry;
+        journey = entry;
+        try {
+          await journeyState.setActiveJourney(entry);
+          console.log(
+            `[DispatchContext] Lazy-captured accept origin for dispatch ${dispatch.id}`
+          );
+        } catch (err: any) {
+          console.warn('[DispatchContext] Lazy accept-origin persist failed:', err.message);
+        }
+      }
 
       const scene = dispatch.incident
         ? { latitude: dispatch.incident.latitude, longitude: dispatch.incident.longitude }
@@ -239,24 +269,28 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // --- UI: liveDistances + arriving banner (hysteresis) ---
       if (scene) {
         const distanceToScene = haversineMeters(gps, scene);
-        setLiveDistances((prev) => ({ ...prev, [dispatch.id]: distanceToScene }));
+        setLiveDistances((prev) => ({ ...prev, [dispatch!.id]: distanceToScene }));
 
-        if (dispatch.status === 'en_route') {
+        if (dispatch.status === 'en_route' || dispatch.status === 'accepted') {
           if (distanceToScene <= ARRIVING_BANNER_ON_METERS) {
-            setArrivingDispatchId((prev) => (prev === dispatch.id ? prev : dispatch.id));
+            setArrivingDispatchId((prev) => (prev === dispatch!.id ? prev : dispatch!.id));
           } else if (distanceToScene > ARRIVING_BANNER_OFF_METERS) {
-            setArrivingDispatchId((prev) => (prev === dispatch.id ? null : prev));
+            setArrivingDispatchId((prev) => (prev === dispatch!.id ? null : prev));
           }
         } else {
-          // Not en_route — dismiss banner if we were showing it for this dispatch
-          setArrivingDispatchId((prev) => (prev === dispatch.id ? null : prev));
+          setArrivingDispatchId((prev) => (prev === dispatch!.id ? null : prev));
         }
       }
 
       if (!canFirePosts) return;
 
-      // --- accepted -> en_route @ >= 75m from accept origin ---
-      if (dispatch.status === 'accepted' && lastEnRouteTriggeredRef.current !== dispatch.id) {
+      // --- accepted -> en_route @ >= 75m from accept origin (requires journey) ---
+      if (
+        journey &&
+        dispatch.id === journey.dispatchId &&
+        dispatch.status === 'accepted' &&
+        lastEnRouteTriggeredRef.current !== dispatch.id
+      ) {
         const distFromOrigin = haversineMeters(gps, {
           latitude: journey.acceptOriginLat,
           longitude: journey.acceptOriginLon,
@@ -284,10 +318,13 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       }
 
-      // --- en_route -> arrived @ <= 25m from scene (client-side optimistic) ---
+      // --- accepted/en_route -> arrived @ <= 25m from scene (client-side optimistic) ---
+      // Firing from `accepted` covers the case where the responder started inside the
+      // 75m en_route geofence (common in testing) and therefore never transitioned to
+      // en_route on their own. Dedupe refs prevent this from firing twice.
       if (
         scene &&
-        dispatch.status === 'en_route' &&
+        (dispatch.status === 'en_route' || dispatch.status === 'accepted') &&
         lastArrivedTriggeredRef.current !== dispatch.id &&
         lastAutoArrivedDispatchRef.current !== dispatch.id
       ) {
@@ -374,6 +411,23 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       if (response.auto_arrived) {
         handleAutoArrival(response.auto_arrived);
+      } else {
+        // Diagnostic: if we're within the backend's auto-arrival radius (100m) of an
+        // active dispatch's scene and the backend still didn't signal arrival, log it.
+        // This makes it obvious in logs when the bug is server-side.
+        const close = dispatchesRef.current.find((d) => {
+          if (!d.incident || !['accepted', 'en_route'].includes(d.status)) return false;
+          const dist = haversineMeters(
+            { latitude: location.latitude, longitude: location.longitude },
+            { latitude: d.incident.latitude, longitude: d.incident.longitude }
+          );
+          return dist <= ARRIVING_BANNER_ON_METERS;
+        });
+        if (close && lastAutoArrivedDispatchRef.current !== close.id) {
+          console.warn(
+            `⚠️ [DispatchContext] Within ${ARRIVING_BANNER_ON_METERS}m of dispatch ${close.id} scene but backend returned no auto_arrived — check backend /responder/location auto-arrival logic`
+          );
+        }
       }
 
       // Backend is reachable — drain buffered offline pings (up to 5 per tick)
@@ -615,17 +669,17 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [startPolling, startPeriodicLocationUpdates, verifyDutyStatusResponse]);
 
   /**
-   * Stop location tracking and set duty status to offline
-   * Called during logout
+   * Stop location tracking. Called reactively when the user logs out (user === null).
+   *
+   * Note: the off-duty POST is NOT made here. AuthContext.logout owns that, because
+   * it runs while the Sanctum token is still valid. By the time this hook fires, the
+   * token has already been cleared and the call would 401.
    */
   const stopTracking = useCallback(async () => {
-    console.log('[DispatchContext] Stopping location tracking and setting duty status to offline...');
+    console.log('[DispatchContext] Stopping location tracking (auth cleared)...');
 
     try {
-      // Stop polling first
       stopPolling();
-
-      // Stop location tracking
       stopPeriodicLocationUpdates();
       await stopBackgroundLocationTracking();
       setIsTrackingActive(false);
@@ -634,23 +688,12 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       activeJourneyRef.current = null;
       lastEnRouteTriggeredRef.current = null;
       lastArrivedTriggeredRef.current = null;
+      lastAutoArrivedDispatchRef.current = null;
       setArrivingDispatchId(null);
       setLiveDistances({});
       await journeyState.clearActiveJourney();
 
-      // Set duty status to offline
-      try {
-        await dispatchService.updateDutyStatus({
-          is_on_duty: false,
-          responder_status: 'offline',
-        });
-        console.log('✅ [DispatchContext] Responder status set to OFF DUTY');
-      } catch (error: any) {
-        console.error('❌ [DispatchContext] Failed to set offline status:', error.message);
-        // Don't throw - continue with logout even if backend fails
-      }
-
-      console.log('[DispatchContext] Location tracking stopped successfully');
+      console.log('[DispatchContext] Location tracking stopped');
     } catch (error: any) {
       console.error('[DispatchContext] Error stopping tracking:', error);
     }
