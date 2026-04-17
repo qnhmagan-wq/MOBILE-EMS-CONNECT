@@ -1,10 +1,13 @@
+import { View } from "react-native";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/src/config/theme";
+import { ArrivingBanner } from "@/src/components/ArrivingBanner";
 
 export default function ResponderLayout() {
   return (
-    <Tabs
+    <View style={{ flex: 1 }}>
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: Colors.primary,
@@ -85,6 +88,8 @@ export default function ResponderLayout() {
           href: null, // Hide from tab bar - accessed from Profile screen
         }}
       />
-    </Tabs>
+      </Tabs>
+      <ArrivingBanner />
+    </View>
   );
 }

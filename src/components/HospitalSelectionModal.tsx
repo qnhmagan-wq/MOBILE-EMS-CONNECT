@@ -20,21 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSizes } from '@/src/config/theme';
 import { NearbyHospital, HospitalRouteData } from '@/src/types/dispatch.types';
 import * as dispatchService from '@/src/services/dispatch.service';
-
-/**
- * Haversine distance calculation between two coordinates
- */
-function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // Earth radius in km
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
+import { haversineMeters, formatDistance } from '@/src/utils/distance';
 
 interface HospitalSelectionModalProps {
   visible: boolean;
@@ -74,11 +60,14 @@ export const HospitalSelectionModal: React.FC<HospitalSelectionModalProps> = ({
       // Compute distance client-side if backend doesn't include it
       const hospitalsWithDistance = (response.hospitals || []).map((h) => {
         if (h.distance_text) return h;
-        const distKm = calculateDistanceKm(latitude, longitude, h.latitude, h.longitude);
+        const meters = haversineMeters(
+          { latitude, longitude },
+          { latitude: h.latitude, longitude: h.longitude }
+        );
         return {
           ...h,
-          distance_meters: Math.round(distKm * 1000),
-          distance_text: distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`,
+          distance_meters: Math.round(meters),
+          distance_text: formatDistance(meters),
         };
       });
       // Sort by distance (closest first)

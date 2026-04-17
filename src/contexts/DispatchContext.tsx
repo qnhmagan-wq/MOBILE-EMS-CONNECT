@@ -17,6 +17,9 @@ import { useDispatchPolling } from '@/src/hooks/useDispatchPolling';
 import * as dispatchService from '@/src/services/dispatch.service';
 import * as locationService from '@/src/services/location.service';
 import * as notificationService from '@/src/services/notification.service';
+import * as journeyState from '@/src/services/journeyState.service';
+import * as locationQueue from '@/src/services/locationQueue.service';
+import { haversineMeters } from '@/src/utils/distance';
 import { trackAction, ActionTypes } from '@/src/utils/actionTracking';
 import {
   startBackgroundLocationTracking,
@@ -28,6 +31,12 @@ import { useAuth } from './AuthContext';
 
 const LOCATION_INTERVAL_EN_ROUTE = 8000; // 8 seconds when en_route (frequent for auto-arrival detection)
 const LOCATION_INTERVAL_DEFAULT = 30000; // 30 seconds otherwise (save battery)
+
+// Auto status progression thresholds (client-side Responder Journey Tracker)
+const EN_ROUTE_TRIGGER_METERS = 75;       // accepted -> en_route when this far from accept origin
+const ARRIVING_BANNER_ON_METERS = 100;    // show "Arriving..." banner when this close to scene
+const ARRIVING_BANNER_OFF_METERS = 150;   // hide banner past this (hysteresis, prevents flicker)
+const CLIENT_ARRIVED_METERS = 25;         // client-side optimistic arrived trigger (tighter than backend 100m)
 
 export interface DispatchContextType {
   // Location Tracking
@@ -47,6 +56,10 @@ export interface DispatchContextType {
   nearbyIncidents: NearbyIncident[];
   lastPollTime: Date | null;
   lastPollResult: string | null;
+
+  // Journey Tracker — live distance to scene per dispatch, and which one is "arriving"
+  liveDistances: Record<number, number>;
+  arrivingDispatchId: number | null;
 
   // Actions
   autoStartTracking: () => Promise<void>;
@@ -86,6 +99,17 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Track current location interval for dynamic frequency adjustments
   const currentIntervalRef = useRef<number>(LOCATION_INTERVAL_DEFAULT);
+
+  // Journey Tracker state — per-dispatch distance to scene + which dispatch is "arriving"
+  const [liveDistances, setLiveDistances] = useState<Record<number, number>>({});
+  const [arrivingDispatchId, setArrivingDispatchId] = useState<number | null>(null);
+
+  // In-memory mirror of the persisted active journey (hot path: read on every GPS fix)
+  const activeJourneyRef = useRef<journeyState.JourneyEntry | null>(null);
+
+  // Dedupe refs for auto-fired transitions
+  const lastEnRouteTriggeredRef = useRef<number | null>(null);
+  const lastArrivedTriggeredRef = useRef<number | null>(null);
 
   // Use dispatch polling hook
   const {
@@ -169,6 +193,15 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       arrived_at: arrived_at,
     });
 
+    // Dismiss arriving banner for this dispatch
+    setArrivingDispatchId((prev) => (prev === dispatch_id ? null : prev));
+
+    // Clear persisted journey if it matches — trip is over, no more geofence evals
+    if (activeJourneyRef.current?.dispatchId === dispatch_id) {
+      activeJourneyRef.current = null;
+      journeyState.clearActiveJourney();
+    }
+
     // Fetch complete server data so all fields are up to date
     refreshDispatches();
 
@@ -186,31 +219,180 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [updateDispatchLocally, refreshDispatches]);
 
   /**
-   * **FIX #2 & #4: Send current location to backend with verification**
-   * **FIX: Added 422 error recovery - sets duty status and retries**
-   * Used for periodic foreground updates as fallback
+   * Journey tracker evaluation — runs on every successful GPS fix.
+   * (a) Always updates liveDistances + arriving banner for UI.
+   * (b) When `canFirePosts`, evaluates 75m accept-origin geofence for auto en_route
+   *     and 25m scene geofence for client-side optimistic arrived.
    */
-  const sendLocationUpdate = useCallback(async () => {
-    try {
-      const location = await locationService.getCurrentLocation();
-      if (location) {
-        const response = await dispatchService.updateLocation({
-          latitude: location.latitude,
-          longitude: location.longitude,
-        });
+  const evaluateJourneyTransitions = useCallback(
+    async (gps: { latitude: number; longitude: number }, canFirePosts: boolean) => {
+      const journey = activeJourneyRef.current;
+      if (!journey) return;
 
-        console.log('📍 [DispatchContext] Location update response:', response);
+      const dispatch = dispatchesRef.current.find((d) => d.id === journey.dispatchId);
+      if (!dispatch) return;
 
-        // Any successful response means the backend received the location
-        setLocationLastSent(new Date());
-        setIsBackendConfirmed(true);
-        setLocationFailureCount(0);
+      const scene = dispatch.incident
+        ? { latitude: dispatch.incident.latitude, longitude: dispatch.incident.longitude }
+        : null;
 
-        // Handle auto-arrival: server detected responder is within 100m of incident
-        if (response.auto_arrived) {
-          handleAutoArrival(response.auto_arrived);
+      // --- UI: liveDistances + arriving banner (hysteresis) ---
+      if (scene) {
+        const distanceToScene = haversineMeters(gps, scene);
+        setLiveDistances((prev) => ({ ...prev, [dispatch.id]: distanceToScene }));
+
+        if (dispatch.status === 'en_route') {
+          if (distanceToScene <= ARRIVING_BANNER_ON_METERS) {
+            setArrivingDispatchId((prev) => (prev === dispatch.id ? prev : dispatch.id));
+          } else if (distanceToScene > ARRIVING_BANNER_OFF_METERS) {
+            setArrivingDispatchId((prev) => (prev === dispatch.id ? null : prev));
+          }
+        } else {
+          // Not en_route — dismiss banner if we were showing it for this dispatch
+          setArrivingDispatchId((prev) => (prev === dispatch.id ? null : prev));
         }
       }
+
+      if (!canFirePosts) return;
+
+      // --- accepted -> en_route @ >= 75m from accept origin ---
+      if (dispatch.status === 'accepted' && lastEnRouteTriggeredRef.current !== dispatch.id) {
+        const distFromOrigin = haversineMeters(gps, {
+          latitude: journey.acceptOriginLat,
+          longitude: journey.acceptOriginLon,
+        });
+        if (distFromOrigin >= EN_ROUTE_TRIGGER_METERS) {
+          lastEnRouteTriggeredRef.current = dispatch.id;
+          console.log(
+            `[DispatchContext] Dispatch ${dispatch.id}: ${Math.round(distFromOrigin)}m from accept origin, auto-firing en_route`
+          );
+          const nowIso = new Date().toISOString();
+          updateDispatchLocally(dispatch.id, { status: 'en_route', en_route_at: nowIso });
+          try {
+            await updateDispatchStatusHook(dispatch.id, 'en_route');
+            await journeyState.updateActiveJourney({ enRouteTriggeredAt: nowIso });
+            if (activeJourneyRef.current) {
+              activeJourneyRef.current = { ...activeJourneyRef.current, enRouteTriggeredAt: nowIso };
+            }
+          } catch (err: any) {
+            console.error(
+              '[DispatchContext] Auto en_route POST failed:',
+              err.response?.data || err.message
+            );
+            lastEnRouteTriggeredRef.current = null; // allow retry next tick
+          }
+        }
+      }
+
+      // --- en_route -> arrived @ <= 25m from scene (client-side optimistic) ---
+      if (
+        scene &&
+        dispatch.status === 'en_route' &&
+        lastArrivedTriggeredRef.current !== dispatch.id &&
+        lastAutoArrivedDispatchRef.current !== dispatch.id
+      ) {
+        const distanceToScene = haversineMeters(gps, scene);
+        if (distanceToScene <= CLIENT_ARRIVED_METERS) {
+          lastArrivedTriggeredRef.current = dispatch.id;
+          lastAutoArrivedDispatchRef.current = dispatch.id;
+          console.log(
+            `[DispatchContext] Dispatch ${dispatch.id}: ${Math.round(distanceToScene)}m from scene, auto-firing arrived (client)`
+          );
+          const nowIso = new Date().toISOString();
+          updateDispatchLocally(dispatch.id, { status: 'arrived', arrived_at: nowIso });
+          setArrivingDispatchId((prev) => (prev === dispatch.id ? null : prev));
+          try {
+            await updateDispatchStatusHook(dispatch.id, 'arrived');
+          } catch (err: any) {
+            const status = err.response?.status;
+            if (status === 409 || status === 422) {
+              console.log(
+                '[DispatchContext] Client-arrived POST superseded by backend (already arrived):',
+                status
+              );
+            } else {
+              console.error(
+                '[DispatchContext] Client-arrived POST failed:',
+                err.response?.data || err.message
+              );
+              lastArrivedTriggeredRef.current = null;
+              lastAutoArrivedDispatchRef.current = null;
+              return;
+            }
+          }
+          if (activeJourneyRef.current?.dispatchId === dispatch.id) {
+            activeJourneyRef.current = null;
+            await journeyState.clearActiveJourney();
+          }
+        }
+      }
+    },
+    [updateDispatchStatusHook, updateDispatchLocally]
+  );
+
+  /**
+   * **FIX #2 & #4: Send current location to backend with verification**
+   * **FIX: Added 422 error recovery - sets duty status and retries**
+   * Now also: drains offline location queue on success, enqueues on network failure,
+   * and runs journey-tracker evaluations (live distance, auto en_route, client-arrived).
+   */
+  const sendLocationUpdate = useCallback(async () => {
+    let location: { latitude: number; longitude: number; timestamp?: number } | null = null;
+    try {
+      location = await locationService.getCurrentLocation();
+    } catch (gpsError: any) {
+      console.error('[DispatchContext] GPS fix failed:', gpsError.message);
+      const isGpsTimeout =
+        gpsError.message?.includes('timeout') ||
+        gpsError.message?.includes('timed out') ||
+        gpsError.message?.includes('GPS');
+      const bgActive = await isBackgroundTrackingActive();
+      if (isGpsTimeout && bgActive) {
+        console.log('[DispatchContext] GPS timeout but background tracking active — treating as OK');
+        setIsBackendConfirmed(true);
+        setLocationFailureCount(0);
+      } else {
+        setIsBackendConfirmed(false);
+        setLocationFailureCount((prev) => prev + 1);
+      }
+      return;
+    }
+
+    if (!location) return;
+
+    try {
+      const response = await dispatchService.updateLocation({
+        latitude: location.latitude,
+        longitude: location.longitude,
+      });
+
+      console.log('📍 [DispatchContext] Location update response:', response);
+
+      setLocationLastSent(new Date());
+      setIsBackendConfirmed(true);
+      setLocationFailureCount(0);
+
+      if (response.auto_arrived) {
+        handleAutoArrival(response.auto_arrived);
+      }
+
+      // Backend is reachable — drain buffered offline pings (up to 5 per tick)
+      try {
+        await locationQueue.drainQueue(async (p) => {
+          await dispatchService.updateLocation({
+            latitude: p.latitude,
+            longitude: p.longitude,
+          });
+        }, 5);
+      } catch (drainErr: any) {
+        console.warn('[DispatchContext] Queue drain error:', drainErr.message);
+      }
+
+      // Live distance + auto-transitions (can fire POSTs — backend is reachable)
+      await evaluateJourneyTransitions(
+        { latitude: location.latitude, longitude: location.longitude },
+        true
+      );
     } catch (error: any) {
       const statusCode = error.response?.status;
 
@@ -226,49 +408,56 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           });
           console.log('✅ [DispatchContext] Status recovered - retrying location update');
 
-          // Retry location update
-          const location = await locationService.getCurrentLocation();
-          if (location) {
-            const retryResponse = await dispatchService.updateLocation({
-              latitude: location.latitude,
-              longitude: location.longitude,
-            });
-            console.log('✅ [DispatchContext] Location update succeeded after recovery');
-            setLocationLastSent(new Date());
-            setIsBackendConfirmed(true);
-            setLocationFailureCount(0);
-
-            // Check for auto-arrival in retry response (previously dropped)
-            if (retryResponse.auto_arrived) {
-              handleAutoArrival(retryResponse.auto_arrived);
-            }
-          }
-        } catch (retryError: any) {
-          console.error('❌ [DispatchContext] Failed to recover status:', retryError.response?.data || retryError.message);
-          setIsBackendConfirmed(false);
-          setLocationFailureCount(prev => prev + 1);
-        }
-      } else {
-        console.error('[DispatchContext] Foreground location update failed:', error.response?.data || error.message);
-
-        // If the error is a GPS timeout (not a backend error) and background tracking is active,
-        // don't mark as failed — background task is successfully sending location
-        const isGpsTimeout = !error.response && (
-          error.message?.includes('timeout') || error.message?.includes('timed out') || error.message?.includes('GPS')
-        );
-        const bgActive = await isBackgroundTrackingActive();
-
-        if (isGpsTimeout && bgActive) {
-          console.log('[DispatchContext] GPS timeout but background tracking active — treating as OK');
+          const retryResponse = await dispatchService.updateLocation({
+            latitude: location.latitude,
+            longitude: location.longitude,
+          });
+          console.log('✅ [DispatchContext] Location update succeeded after recovery');
+          setLocationLastSent(new Date());
           setIsBackendConfirmed(true);
           setLocationFailureCount(0);
-        } else {
+
+          if (retryResponse.auto_arrived) {
+            handleAutoArrival(retryResponse.auto_arrived);
+          }
+
+          await evaluateJourneyTransitions(
+            { latitude: location.latitude, longitude: location.longitude },
+            true
+          );
+        } catch (retryError: any) {
+          console.error(
+            '❌ [DispatchContext] Failed to recover status:',
+            retryError.response?.data || retryError.message
+          );
           setIsBackendConfirmed(false);
-          setLocationFailureCount(prev => prev + 1);
+          setLocationFailureCount((prev) => prev + 1);
         }
+      } else if (!error.response) {
+        // Network-class error (no HTTP response) — buffer for later flush.
+        console.warn('[DispatchContext] Location send offline — enqueuing ping:', error.message);
+        await locationQueue.enqueuePing({
+          latitude: location.latitude,
+          longitude: location.longitude,
+          capturedAt: new Date().toISOString(),
+        });
+        setIsBackendConfirmed(false);
+        setLocationFailureCount((prev) => prev + 1);
+        // Still update UI from the fresh GPS fix; skip transition POSTs (they'd also fail).
+        await evaluateJourneyTransitions(
+          { latitude: location.latitude, longitude: location.longitude },
+          false
+        );
+      } else {
+        console.error(
+          '[DispatchContext] Foreground location update failed:',
+          error.response?.data || error.message
+        );
+        setIsBackendConfirmed(false);
+        setLocationFailureCount((prev) => prev + 1);
       }
     }
-  }, [updateDispatchLocally, handleAutoArrival]);
+  }, [handleAutoArrival, evaluateJourneyTransitions]);
 
   /**
    * **FIX #2: Start periodic foreground location updates**
@@ -441,6 +630,14 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await stopBackgroundLocationTracking();
       setIsTrackingActive(false);
 
+      // Clear journey + arriving banner so the next session starts clean
+      activeJourneyRef.current = null;
+      lastEnRouteTriggeredRef.current = null;
+      lastArrivedTriggeredRef.current = null;
+      setArrivingDispatchId(null);
+      setLiveDistances({});
+      await journeyState.clearActiveJourney();
+
       // Set duty status to offline
       try {
         await dispatchService.updateDutyStatus({
@@ -460,12 +657,63 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [stopPolling, stopPeriodicLocationUpdates]);
 
   /**
-   * Update dispatch status wrapper
+   * Update dispatch status wrapper.
+   *
+   * Also manages the persisted Responder Journey:
+   *   - on `accepted`: capture current GPS as the accept-origin so the client-side
+   *     geofence can auto-fire en_route at ~75m.
+   *   - on `declined` / `cancelled` / `completed` / `arrived`: clear the journey
+   *     (the trip is over; no more auto-transitions are possible).
    */
   const updateDispatchStatus = useCallback(
     async (dispatchId: number, status: DispatchStatus) => {
+      // Pre-flight: capture accept-origin GPS BEFORE the POST so we don't lose it if
+      // the user kills the app between POST and the next GPS fix.
+      if (status === 'accepted') {
+        try {
+          const gps = await locationService.getCurrentLocation();
+          if (gps) {
+            const entry: journeyState.JourneyEntry = {
+              dispatchId,
+              acceptOriginLat: gps.latitude,
+              acceptOriginLon: gps.longitude,
+              acceptedAt: new Date().toISOString(),
+            };
+            activeJourneyRef.current = entry;
+            lastEnRouteTriggeredRef.current = null;
+            lastArrivedTriggeredRef.current = null;
+            await journeyState.setActiveJourney(entry);
+          } else {
+            console.warn('[DispatchContext] Accept-origin capture skipped — no GPS available');
+          }
+        } catch (gpsErr: any) {
+          console.warn(
+            '[DispatchContext] Accept-origin capture failed (continuing accept):',
+            gpsErr.message
+          );
+        }
+      }
+
       try {
-        return await updateDispatchStatusHook(dispatchId, status);
+        const result = await updateDispatchStatusHook(dispatchId, status);
+
+        // Terminal-ish statuses clear the journey (match only if id matches — user may
+        // manually transition a different dispatch while another has an active journey).
+        if (['declined', 'cancelled', 'completed', 'arrived'].includes(status)) {
+          if (activeJourneyRef.current?.dispatchId === dispatchId) {
+            activeJourneyRef.current = null;
+            await journeyState.clearActiveJourney();
+          }
+          setArrivingDispatchId((prev) => (prev === dispatchId ? null : prev));
+          setLiveDistances((prev) => {
+            if (!(dispatchId in prev)) return prev;
+            const next = { ...prev };
+            delete next[dispatchId];
+            return next;
+          });
+        }
+
+        return result;
       } catch (error) {
         // Error already handled in hook
         throw error;
@@ -503,6 +751,16 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // even if tracking setup fails
     console.log('[DispatchContext] Starting dispatch polling for responder...');
     startPolling();
+
+    // Hydrate persisted journey state so cold-restart mid-dispatch resumes auto-transitions.
+    (async () => {
+      const persisted = await journeyState.loadActiveJourney();
+      if (persisted) {
+        activeJourneyRef.current = persisted;
+        lastEnRouteTriggeredRef.current = persisted.enRouteTriggeredAt ? persisted.dispatchId : null;
+        lastArrivedTriggeredRef.current = persisted.arrivedTriggeredAt ? persisted.dispatchId : null;
+      }
+    })();
 
     // **Safety net: Check if already tracking, otherwise do full auto-start**
     (async () => {
@@ -608,19 +866,27 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const subscription = Notifications.addNotificationReceivedListener((notification) => {
       const data = notification.request.content.data as { type?: string; dispatchId?: number };
-      if (data?.type === 'auto_arrival' && data.dispatchId) {
-        console.log('[DispatchContext] Auto-arrival notification received from background task:', data.dispatchId);
+      const bgDispatchId = data?.dispatchId;
+      if (data?.type === 'auto_arrival' && typeof bgDispatchId === 'number') {
+        console.log('[DispatchContext] Auto-arrival notification received from background task:', bgDispatchId);
 
         // Deduplication: foreground sendLocationUpdate may have already handled this
-        if (data.dispatchId === lastAutoArrivedDispatchRef.current) {
+        if (bgDispatchId === lastAutoArrivedDispatchRef.current) {
           console.log('[DispatchContext] Auto-arrival already processed, skipping');
           return;
         }
 
         // Update local state and fetch full server data
-        lastAutoArrivedDispatchRef.current = data.dispatchId;
-        updateDispatchLocally(data.dispatchId, { status: 'arrived' });
+        lastAutoArrivedDispatchRef.current = bgDispatchId;
+        updateDispatchLocally(bgDispatchId, { status: 'arrived' });
         refreshDispatches();
+
+        // Banner off + journey cleared (trip is done)
+        setArrivingDispatchId((prev) => (prev === bgDispatchId ? null : prev));
+        if (activeJourneyRef.current?.dispatchId === bgDispatchId) {
+          activeJourneyRef.current = null;
+          journeyState.clearActiveJourney();
+        }
       }
     });
 
@@ -639,6 +905,8 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     nearbyIncidents,
     lastPollTime,
     lastPollResult,
+    liveDistances,
+    arrivingDispatchId,
     autoStartTracking,
     stopTracking,
     updateDispatchStatus,

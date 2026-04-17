@@ -34,24 +34,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import * as mapsService from '@/src/services/maps.service';
+import { formatDistance, haversineMeters } from "@/src/utils/distance";
 
-/**
- * Calculate straight-line distance between two coordinates (Haversine formula)
- */
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371e3; // Earth's radius in meters
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c; // Distance in meters
-}
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number =>
+  haversineMeters({ latitude: lat1, longitude: lon1 }, { latitude: lat2, longitude: lon2 });
 
 export default function RouteMapScreen() {
   const router = useRouter();
@@ -72,7 +58,7 @@ export default function RouteMapScreen() {
     }
   }, [params.incidentData]);
 
-  const { dispatches, updateDispatchStatus } = useDispatch();
+  const { dispatches, updateDispatchStatus, liveDistances } = useDispatch();
 
   // Find the dispatch and incident data from context (fallback)
   const dispatch = dispatches.find(d => d.id === dispatchId);
@@ -521,23 +507,29 @@ export default function RouteMapScreen() {
               <Text style={styles.address}>{incident.address}</Text>
             </View>
 
-            {/* Distance and ETA */}
-            {(distance || eta) && (
-              <View style={styles.distanceRow}>
-                {distance && (
-                  <View style={styles.distanceItem}>
-                    <Ionicons name="resize" size={16} color={Colors.textSecondary} />
-                    <Text style={styles.distanceText}>{distance}</Text>
-                  </View>
-                )}
-                {eta && (
-                  <View style={styles.distanceItem}>
-                    <Ionicons name="time" size={16} color={Colors.textSecondary} />
-                    <Text style={styles.distanceText}>ETA: {eta}</Text>
-                  </View>
-                )}
-              </View>
-            )}
+            {/* Distance and ETA — prefer live (from context, haversine on every GPS fix)
+                over route-service distance so the number ticks down as the responder moves. */}
+            {(() => {
+              const liveMeters = dispatchId ? liveDistances[dispatchId] : undefined;
+              const shownDistance = typeof liveMeters === 'number' ? formatDistance(liveMeters) : distance;
+              if (!shownDistance && !eta) return null;
+              return (
+                <View style={styles.distanceRow}>
+                  {shownDistance && (
+                    <View style={styles.distanceItem}>
+                      <Ionicons name="resize" size={16} color={Colors.textSecondary} />
+                      <Text style={styles.distanceText}>{shownDistance}</Text>
+                    </View>
+                  )}
+                  {eta && (
+                    <View style={styles.distanceItem}>
+                      <Ionicons name="time" size={16} color={Colors.textSecondary} />
+                      <Text style={styles.distanceText}>ETA: {eta}</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
 
             {/* Get Directions in Google Maps */}
             <TouchableOpacity

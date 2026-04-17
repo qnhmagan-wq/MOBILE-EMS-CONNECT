@@ -14,6 +14,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
+import { formatDistance } from "@/src/utils/distance";
 import { Incident } from "@/src/types/incident.types";
 import { Dispatch, DispatchStatus, PreArrivalData, HospitalRouteData, IncidentReport } from "@/src/types/dispatch.types";
 import { DispatchStatusBadge } from "@/components/DispatchStatusBadge";
@@ -29,7 +30,7 @@ export default function ResponderIncidentDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const dispatchId = params.dispatchId ? parseInt(params.dispatchId as string) : null;
-  const { dispatches, updateDispatchStatus: updateStatus } = useDispatch();
+  const { dispatches, updateDispatchStatus: updateStatus, liveDistances } = useDispatch();
 
   const [incident, setIncident] = useState<Incident | null>(null);
   const [dispatch, setDispatch] = useState<Dispatch | null>(null);
@@ -216,29 +217,12 @@ export default function ResponderIncidentDetailsScreen() {
             try {
               await updateStatus(dispatch.id, newStatus);
 
-              // **FIX: Sequential status updates - Accept then En Route before navigation**
-              // Backend requires: assigned → accepted → en_route (must be sequential)
+              // Accept: the journey tracker (DispatchContext.updateDispatchStatus) has captured
+              // the accept-origin GPS. The 75m accept-origin geofence will auto-fire en_route
+              // as the responder leaves base — no forced sequential status writes here.
               if (newStatus === 'accepted') {
-                console.log('[Incident Details] Status updated to accepted, waiting for backend to commit...');
+                console.log('[Incident Details] Dispatch accepted, navigating to route-map (en_route will auto-fire at 75m)');
 
-                // Add 500ms delay to ensure backend commits the accepted status
-                // This prevents race condition where en_route is sent before accepted is committed
-                await new Promise(resolve => setTimeout(resolve, 500));
-
-                try {
-                  // Update to en_route AFTER delay to avoid race condition
-                  await updateStatus(dispatch.id, 'en_route');
-                  console.log('[Incident Details] Status updated to en_route successfully');
-                } catch (enRouteError: any) {
-                  console.error('[Incident Details] Failed to update to en_route:', enRouteError);
-                  // Still navigate but without autoStart - let user manually trigger en_route
-                  Alert.alert(
-                    'Partial Success',
-                    'Dispatch accepted but failed to set en_route status. You can update it manually on the map screen.'
-                  );
-                }
-
-                // Navigate to route-map (without autoStart since we already updated)
                 if (isMounted.current && incident) {
                   // Serialize incident data for safe URL transmission
                   const incidentData = encodeURIComponent(JSON.stringify({
@@ -412,12 +396,15 @@ export default function ResponderIncidentDetailsScreen() {
         </View>
 
         {/* Distance and ETA */}
-        {dispatch?.distance_text && (
+        {dispatch && (dispatch.distance_text || typeof liveDistances[dispatch.id] === 'number') && (
           <View style={styles.incidentCard}>
             <View style={styles.distanceInfo}>
               <Ionicons name="navigate" size={20} color={Colors.textWhite} />
               <Text style={styles.distanceText}>
-                {dispatch.distance_text} • {dispatch.duration_text || 'Calculating...'}
+                {typeof liveDistances[dispatch.id] === 'number'
+                  ? formatDistance(liveDistances[dispatch.id])
+                  : dispatch.distance_text}
+                {dispatch.duration_text ? ` • ${dispatch.duration_text}` : ''}
               </Text>
             </View>
           </View>

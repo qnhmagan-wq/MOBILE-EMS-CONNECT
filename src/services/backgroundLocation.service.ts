@@ -9,6 +9,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { updateLocation, updateDutyStatus } from './dispatch.service';
 import { showAutoArrivalNotification } from './notification.service';
+import * as locationQueue from './locationQueue.service';
 
 const BACKGROUND_LOCATION_TASK = 'background-location-task';
 
@@ -47,6 +48,15 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
           showAutoArrivalNotification(response.auto_arrived.dispatch_id);
           // Local dispatch state will reconcile on next foreground poll
         }
+
+        // Backend reachable — drain up to 5 buffered offline pings (shared queue with foreground).
+        try {
+          await locationQueue.drainQueue(async (p) => {
+            await updateLocation({ latitude: p.latitude, longitude: p.longitude });
+          }, 5);
+        } catch (drainErr: any) {
+          console.warn('[Background Location Task] Queue drain error:', drainErr.message);
+        }
       } catch (error: any) {
         const statusCode = error.response?.status;
 
@@ -77,6 +87,18 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
           } catch (retryError: any) {
             console.error('❌ [Background Location Task] Failed to recover:', retryError.response?.data || retryError.message);
             // Don't throw - let task continue
+          }
+        } else if (!error.response) {
+          // Network failure — buffer the ping for later drain.
+          console.warn('[Background Location Task] Offline — enqueuing ping:', error.message);
+          try {
+            await locationQueue.enqueuePing({
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+              capturedAt: new Date(location.timestamp).toISOString(),
+            });
+          } catch (enqErr: any) {
+            console.error('[Background Location Task] Enqueue failed:', enqErr.message);
           }
         } else {
           console.error('[Background Location Task] Failed to update location:', error.response?.data || error.message);
