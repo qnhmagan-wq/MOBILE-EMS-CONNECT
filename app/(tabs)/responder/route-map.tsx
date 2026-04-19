@@ -260,21 +260,10 @@ export default function RouteMapScreen() {
   // Note: Auto-update to en_route is now handled in incident-details.tsx
   // before navigation to avoid race conditions with backend status validation
 
-  /**
-   * Auto-navigate to incident-details when auto-arrival changes dispatch status to 'arrived'.
-   * Waits 2 seconds so the user can see the status change on the map screen.
-   */
-  useEffect(() => {
-    if (dispatch?.status === 'arrived' && incidentId && dispatchId) {
-      console.log('[Route Map] Auto-arrival detected, navigating to incident details in 2s...');
-      const timer = setTimeout(() => {
-        router.replace(
-          `/(tabs)/responder/incident-details?id=${incidentId}&dispatchId=${dispatchId}`
-        );
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [dispatch?.status, incidentId, dispatchId, router]);
+  // Auto-arrival no longer force-navigates to incident-details — the bottom
+  // CTA on this screen now swaps to "Going to Hospital" once status='arrived'
+  // (see the info-panel block below). The responder can tap to start
+  // transport, or open the Dispatch Details tab to submit pre-arrival info.
 
   /**
    * Handle "I've Arrived" button press
@@ -361,6 +350,39 @@ export default function RouteMapScreen() {
         },
       ]
     );
+  };
+
+  /**
+   * Transition to transporting_to_hospital from the arrived state. Matches
+   * the handler in incident-details.tsx so the hospital-navigation screen
+   * owns the post-transition UI (hospital route, directions, complete).
+   */
+  const handleGoingToHospital = async () => {
+    if (!dispatchId) return;
+    setIsUpdatingStatus(true);
+    try {
+      await updateDispatchStatus(dispatchId, 'transporting_to_hospital');
+      router.replace(
+        `/(tabs)/responder/hospital-navigation?dispatchId=${dispatchId}`
+      );
+    } catch (err: any) {
+      const errorCode = err.response?.data?.error_code;
+      const backendMsg = err.response?.data?.message;
+      if (errorCode === 'NO_HOSPITAL_ASSIGNED') {
+        Alert.alert(
+          'No Hospital Assigned',
+          'Please contact your administrator to assign a hospital to your profile.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Error',
+          backendMsg || 'Failed to start hospital transport. Please try again.'
+        );
+      }
+    } finally {
+      setIsUpdatingStatus(false);
+    }
   };
 
   /**
@@ -478,14 +500,27 @@ export default function RouteMapScreen() {
             <View style={[
               styles.statusBadge,
               dispatch?.status === 'arrived' && styles.statusBadgeArrived,
+              dispatch?.status === 'transporting_to_hospital' && styles.statusBadgeTransporting,
             ]}>
               <Ionicons
-                name={dispatch?.status === 'arrived' ? 'checkmark-circle' : 'navigate-circle'}
+                name={
+                  dispatch?.status === 'arrived'
+                    ? 'checkmark-circle'
+                    : dispatch?.status === 'transporting_to_hospital'
+                    ? 'medical'
+                    : 'navigate-circle'
+                }
                 size={20}
                 color="#fff"
               />
               <Text style={styles.statusText}>
-                {dispatch?.status === 'arrived' ? 'ARRIVED' : 'EN ROUTE'}
+                {dispatch?.status === 'arrived'
+                  ? 'ARRIVED'
+                  : dispatch?.status === 'transporting_to_hospital'
+                  ? 'TRANSPORTING'
+                  : dispatch?.status === 'accepted'
+                  ? 'ACCEPTED'
+                  : 'EN ROUTE'}
               </Text>
             </View>
 
@@ -540,12 +575,43 @@ export default function RouteMapScreen() {
               <Text style={styles.externalNavButtonText}>Open in Google Maps</Text>
             </TouchableOpacity>
 
-            {/* I've Arrived Button — hidden when already auto-arrived */}
+            {/* Bottom CTA — swaps based on dispatch.status. The server owns
+                arrival; once auto-arrival fires this flips to Going to Hospital
+                without any user tap. Late-open (force-quit then reopen) also
+                lands on the correct CTA because it's keyed off dispatch.status. */}
             {dispatch?.status === 'arrived' ? (
-              <View style={styles.arrivedConfirmation}>
-                <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
-                <Text style={styles.arrivedConfirmationText}>Arrived at scene</Text>
-              </View>
+              <>
+                <View style={styles.arrivedConfirmation}>
+                  <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
+                  <Text style={styles.arrivedConfirmationText}>I have arrived here</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.transportButton, isUpdatingStatus && styles.arrivedButtonDisabled]}
+                  onPress={handleGoingToHospital}
+                  disabled={isUpdatingStatus}
+                >
+                  {isUpdatingStatus ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="medical" size={24} color="#fff" />
+                      <Text style={styles.arrivedButtonText}>Going to Hospital</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : dispatch?.status === 'transporting_to_hospital' ? (
+              <TouchableOpacity
+                style={[styles.transportButton, isUpdatingStatus && styles.arrivedButtonDisabled]}
+                onPress={() =>
+                  router.replace(
+                    `/(tabs)/responder/hospital-navigation?dispatchId=${dispatchId}`
+                  )
+                }
+              >
+                <Ionicons name="medical" size={24} color="#fff" />
+                <Text style={styles.arrivedButtonText}>Continue to Hospital</Text>
+              </TouchableOpacity>
             ) : (
               <TouchableOpacity
                 style={[styles.arrivedButton, isUpdatingStatus && styles.arrivedButtonDisabled]}
@@ -723,6 +789,9 @@ const styles = StyleSheet.create({
   statusBadgeArrived: {
     backgroundColor: Colors.success,
   },
+  statusBadgeTransporting: {
+    backgroundColor: '#3B82F6',
+  },
   arrivedButton: {
     backgroundColor: Colors.success,
     borderRadius: BorderRadius.md,
@@ -750,11 +819,21 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: Colors.success,
+    marginBottom: Spacing.sm,
   },
   arrivedConfirmationText: {
     color: Colors.success,
     fontSize: FontSizes.md,
     fontWeight: '600',
+  },
+  transportButton: {
+    backgroundColor: '#3B82F6',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
   },
   externalNavButton: {
     backgroundColor: Colors.surface,

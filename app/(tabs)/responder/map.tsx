@@ -8,7 +8,7 @@
  * - Real-time location updates every 5 seconds or 10 meters
  */
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { View, StyleSheet, SafeAreaView, Text, ActivityIndicator, TouchableOpacity } from "react-native";
 import { PROVIDER_GOOGLE, Marker, Region } from "react-native-maps";
 import DeferredMapView from "@/components/DeferredMapView";
@@ -20,9 +20,28 @@ import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { applyJitterForOverlaps } from "@/src/utils/coordinates";
 
 export default function MapOverviewScreen() {
   const { activeDispatches } = useDispatch();
+
+  // Offset markers that share identical coordinates on a ~6m ring so a second
+  // report from the same spot doesn't hide under the first one. Keyed by
+  // dispatch id, so pins remain independently tappable.
+  const dispatchMarkers = useMemo(
+    () =>
+      applyJitterForOverlaps(
+        activeDispatches
+          .filter((d) => d.incident)
+          .map((d) => ({
+            id: d.id,
+            latitude: d.incident.latitude,
+            longitude: d.incident.longitude,
+            dispatch: d,
+          }))
+      ),
+    [activeDispatches]
+  );
 
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [stations, setStations] = useState<Station[]>([]);
@@ -184,14 +203,11 @@ export default function MapOverviewScreen() {
           showsCompass={true}
           showsTraffic={false}
         >
-          {/* Active Incident Markers */}
-          {activeDispatches.map((dispatch) => (
+          {/* Active Incident Markers (jittered when stacked at identical coords) */}
+          {dispatchMarkers.map(({ id, latitude, longitude, dispatch }) => (
             <Marker
-              key={`dispatch-${dispatch.id}`}
-              coordinate={{
-                latitude: dispatch.incident.latitude,
-                longitude: dispatch.incident.longitude,
-              }}
+              key={`dispatch-${id}`}
+              coordinate={{ latitude, longitude }}
               pinColor={Colors.danger}
               title={`${dispatch.incident.type.charAt(0).toUpperCase() + dispatch.incident.type.slice(1).replace('_', ' ')} Emergency`}
               description={`${dispatch.incident.address}\nStatus: ${dispatch.status.toUpperCase().replace('_', ' ')}`}

@@ -37,6 +37,18 @@ export const updateLocation = async (
   location: LocationUpdateRequest
 ): Promise<LocationUpdateResponse> => {
   try {
+    // Dev-only so QA can grep for `[LOCATION PING]` and confirm accuracy is
+    // present with a real OS-reported number. Gated on __DEV__ because every
+    // responder pings every 5 s — this would flood production logs.
+    if (__DEV__) {
+      console.log('[LOCATION PING]', {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        accuracy: location.accuracy,
+        accuracyKeyPresent: Object.prototype.hasOwnProperty.call(location, 'accuracy'),
+        timestamp: new Date().toISOString(),
+      });
+    }
     const response = await api.post<LocationUpdateResponse>('/responder/location', location);
     return response.data;
   } catch (error: any) {

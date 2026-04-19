@@ -93,3 +93,45 @@ export const areValidPolylineCoordinates = (
   if (coordinates.length === 0) return false;
   return coordinates.every(coord => isValidCoordinate(coord));
 };
+
+/**
+ * Spread markers that share identical coordinates on a ~6m ring so every
+ * pin stays independently tappable instead of hiding under the top one.
+ * Deterministic — same input produces the same output, so markers don't
+ * shuffle between renders.
+ */
+export const applyJitterForOverlaps = <
+  T extends { id: number; latitude: number; longitude: number }
+>(
+  items: T[]
+): T[] => {
+  if (items.length < 2) return items;
+
+  // Group by coordinate rounded to 6 decimals (~10 cm — below GPS accuracy).
+  const grouped = new Map<string, T[]>();
+  for (const item of items) {
+    const key = `${item.latitude.toFixed(6)},${item.longitude.toFixed(6)}`;
+    const bucket = grouped.get(key);
+    if (bucket) bucket.push(item);
+    else grouped.set(key, [item]);
+  }
+
+  const offsetMeters = 6;
+  const metersPerLatDegree = 111_111;
+
+  return items.map((item) => {
+    const key = `${item.latitude.toFixed(6)},${item.longitude.toFixed(6)}`;
+    const group = grouped.get(key);
+    if (!group || group.length === 1) return item;
+
+    const idx = group.findIndex((g) => g.id === item.id);
+    const angle = (idx * 2 * Math.PI) / group.length;
+    const cosLat = Math.cos((item.latitude * Math.PI) / 180);
+    // Guard against division by zero at the poles. Below 1e-6 just falls back.
+    const lonScale = cosLat === 0 ? 1 : cosLat;
+    const dLat = (offsetMeters * Math.cos(angle)) / metersPerLatDegree;
+    const dLon = (offsetMeters * Math.sin(angle)) / (metersPerLatDegree * lonScale);
+
+    return { ...item, latitude: item.latitude + dLat, longitude: item.longitude + dLon };
+  });
+};
