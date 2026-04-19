@@ -7,9 +7,10 @@
 
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
-import { updateLocation, updateDutyStatus } from './dispatch.service';
+import { updateLocation } from './dispatch.service';
 import { showAutoArrivalNotification } from './notification.service';
 import * as locationQueue from './locationQueue.service';
+import { buildLocationRequest } from './location.service';
 
 const BACKGROUND_LOCATION_TASK = 'background-location-task';
 
@@ -35,11 +36,14 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
       });
 
       try {
-        // Send location to backend
-        const response = await updateLocation({
+        // Send location to backend — include accuracy when the OS provided one
+        // so the backend's auto-arrival gate has a real reading to work with.
+        const body = buildLocationRequest({
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
+          accuracy: location.coords.accuracy ?? undefined,
         });
+        const response = await updateLocation(body);
         console.log('📍 [Background Location Task] Location updated successfully');
 
         // Handle auto-arrival (server detected responder within 100m of incident)
@@ -52,7 +56,7 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
         // Backend reachable — drain up to 5 buffered offline pings (shared queue with foreground).
         try {
           await locationQueue.drainQueue(async (p) => {
-            await updateLocation({ latitude: p.latitude, longitude: p.longitude });
+            await updateLocation(buildLocationRequest(p));
           }, 5);
         } catch (drainErr: any) {
           console.warn('[Background Location Task] Queue drain error:', drainErr.message);
@@ -61,33 +65,10 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
         const statusCode = error.response?.status;
 
         if (statusCode === 422) {
-          console.error('❌ [Background Location Task] Location rejected - responder not on duty (422)');
-
-          // **FIX: Attempt to recover by setting duty status again**
-          try {
-            console.log('[Background Location Task] Attempting to recover - setting duty status...');
-            await updateDutyStatus({
-              is_on_duty: true,
-              responder_status: 'idle',
-            });
-            console.log('✅ [Background Location Task] Status recovered - retrying location update');
-
-            // Retry location update
-            const retryResponse = await updateLocation({
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-            });
-            console.log('✅ [Background Location Task] Location update succeeded after recovery');
-
-            // Check for auto-arrival in retry response (previously dropped)
-            if (retryResponse.auto_arrived) {
-              console.log('[Background Location Task] Auto-arrival detected after recovery:', retryResponse.auto_arrived);
-              showAutoArrivalNotification(retryResponse.auto_arrived.dispatch_id);
-            }
-          } catch (retryError: any) {
-            console.error('❌ [Background Location Task] Failed to recover:', retryError.response?.data || retryError.message);
-            // Don't throw - let task continue
-          }
+          // Silent pause: responder is off-duty (or was kicked off). Don't
+          // auto-retry here — the foreground path handles resuming when the
+          // responder toggles back on-duty or accepts a dispatch.
+          console.log('[Background Location Task] 422 (off-duty) — silently skipping ping');
         } else if (!error.response) {
           // Network failure — buffer the ping for later drain.
           console.warn('[Background Location Task] Offline — enqueuing ping:', error.message);

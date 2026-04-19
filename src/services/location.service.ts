@@ -6,7 +6,25 @@
  */
 
 import * as Location from 'expo-location';
-import { LocationUpdate } from '@/src/types/dispatch.types';
+import { LocationUpdate, LocationUpdateRequest } from '@/src/types/dispatch.types';
+
+/**
+ * Build a POST /responder/location body from a GPS fix. Omits `accuracy`
+ * entirely when the OS didn't produce a real value — the backend treats
+ * missing vs. present differently for auto-arrival logic.
+ */
+export const buildLocationRequest = (
+  update: Pick<LocationUpdate, 'latitude' | 'longitude' | 'accuracy'>
+): LocationUpdateRequest => {
+  const body: LocationUpdateRequest = {
+    latitude: update.latitude,
+    longitude: update.longitude,
+  };
+  if (typeof update.accuracy === 'number' && update.accuracy >= 0) {
+    body.accuracy = update.accuracy;
+  }
+  return body;
+};
 
 /**
  * Permission request result
@@ -93,6 +111,12 @@ export const getCurrentLocation = async (timeoutMs: number = 10000): Promise<Loc
       longitude: location.coords.longitude,
       timestamp: location.timestamp,
     };
+    if (
+      typeof location.coords.accuracy === 'number' &&
+      location.coords.accuracy >= 0
+    ) {
+      update.accuracy = location.coords.accuracy;
+    }
 
     // Update cached location
     lastKnownLocation = update;
@@ -153,6 +177,12 @@ export const startContinuousTracking = async (
           longitude: location.coords.longitude,
           timestamp: location.timestamp,
         };
+        if (
+          typeof location.coords.accuracy === 'number' &&
+          location.coords.accuracy >= 0
+        ) {
+          update.accuracy = location.coords.accuracy;
+        }
 
         lastKnownLocation = update;
         callback(update);

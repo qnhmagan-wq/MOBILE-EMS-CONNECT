@@ -82,6 +82,7 @@ export interface LocationUpdate {
   latitude: number;
   longitude: number;
   timestamp?: number;
+  accuracy?: number;
 }
 
 /**
@@ -107,11 +108,14 @@ export interface DutyStatusResponse {
 }
 
 /**
- * Location update request
+ * Location update request. `accuracy` is the OS-reported horizontal accuracy in
+ * meters; omit the field when the OS doesn't provide one (do NOT send 0/null —
+ * the backend treats missing-vs-present differently for auto-arrival logic).
  */
 export interface LocationUpdateRequest {
   latitude: number;
   longitude: number;
+  accuracy?: number;
 }
 
 /**
@@ -125,6 +129,21 @@ export interface AutoArrivedData {
 }
 
 /**
+ * Active-dispatch snapshot returned on every successful location ping.
+ * Source of truth for the live distance bar.
+ */
+export interface ActiveDispatchSnapshot {
+  id: number;
+  incident_id: number;
+  status: DispatchStatus;
+  distance_meters: number;
+  distance_text: string;
+  estimated_duration_seconds: number;
+  duration_text: string;
+  calculated_at: string;
+}
+
+/**
  * Location update response
  */
 export interface LocationUpdateResponse {
@@ -133,7 +152,9 @@ export interface LocationUpdateResponse {
     latitude: number;
     longitude: number;
     updated_at: string;
+    last_active_at?: string;
   };
+  active_dispatch?: ActiveDispatchSnapshot | null;
   auto_arrived?: AutoArrivedData;
 }
 

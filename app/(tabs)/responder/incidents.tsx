@@ -6,12 +6,13 @@ import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { Dispatch, DispatchStatus } from "@/src/types/dispatch.types";
+import { formatDistance } from "@/src/utils/distance";
 import { Linking } from "react-native";
 
 export default function ResponderIncidentsScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { activeDispatches, isTrackingActive, updateDispatchStatus, refreshDispatches, lastPollTime, lastPollResult } = useDispatch();
+  const { activeDispatches, isTrackingActive, updateDispatchStatus, refreshDispatches, lastPollTime, lastPollResult, liveDistances } = useDispatch();
   const [status, setStatus] = React.useState<'Available' | 'Busy'>('Available');
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
@@ -234,11 +235,14 @@ export default function ResponderIncidentsScreen() {
                     </Text>
                   </View>
                 )}
-                {dispatch.distance_text && (
+                {(typeof liveDistances[dispatch.id] === 'number' || dispatch.distance_text) && (
                   <View style={styles.distanceRow}>
                     <Ionicons name="navigate" size={16} color={Colors.textWhite} />
                     <Text style={styles.distanceText}>
-                      {dispatch.distance_text} • {dispatch.duration_text || 'Calculating...'}
+                      {typeof liveDistances[dispatch.id] === 'number'
+                        ? formatDistance(liveDistances[dispatch.id])
+                        : dispatch.distance_text}
+                      {` • ${dispatch.duration_text || 'Calculating...'}`}
                     </Text>
                   </View>
                 )}

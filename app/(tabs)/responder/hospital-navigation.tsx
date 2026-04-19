@@ -20,6 +20,7 @@ import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Dispatch, HospitalRouteData } from "@/src/types/dispatch.types";
 import { scale, scaleFontSize, scaleSpacing } from "@/src/utils/responsive";
 import * as dispatchService from "@/src/services/dispatch.service";
+import { buildLocationRequest } from "@/src/services/location.service";
 
 export default function HospitalNavigationScreen() {
   const router = useRouter();
@@ -140,11 +141,15 @@ export default function HospitalNavigationScreen() {
                 longitude: newLocation.coords.longitude,
               });
 
-              // Update backend with current location
-              dispatchService.updateLocation({
-                latitude: newLocation.coords.latitude,
-                longitude: newLocation.coords.longitude,
-              }).catch(error => {
+              // Update backend with current location — include accuracy when
+              // the OS provided one (auto-arrival logic is accuracy-aware).
+              dispatchService.updateLocation(
+                buildLocationRequest({
+                  latitude: newLocation.coords.latitude,
+                  longitude: newLocation.coords.longitude,
+                  accuracy: newLocation.coords.accuracy ?? undefined,
+                })
+              ).catch(error => {
                 console.error('[Hospital Navigation] Location update failed:', error);
               });
             }

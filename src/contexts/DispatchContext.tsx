@@ -10,9 +10,10 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { Alert, Platform, Linking } from 'react-native';
+import { Alert, Platform, Linking, ToastAndroid } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { DutyStatus, Dispatch, DispatchStatus, NearbyIncident, AutoArrivedData } from '@/src/types/dispatch.types';
+import * as Haptics from 'expo-haptics';
+import { DutyStatus, Dispatch, DispatchStatus, NearbyIncident, AutoArrivedData, ActiveDispatchSnapshot, LocationUpdate } from '@/src/types/dispatch.types';
 import { useDispatchPolling } from '@/src/hooks/useDispatchPolling';
 import * as dispatchService from '@/src/services/dispatch.service';
 import * as locationService from '@/src/services/location.service';
@@ -29,14 +30,16 @@ import {
 } from '@/src/services/backgroundLocation.service';
 import { useAuth } from './AuthContext';
 
-const LOCATION_INTERVAL_EN_ROUTE = 8000; // 8 seconds when en_route (frequent for auto-arrival detection)
-const LOCATION_INTERVAL_DEFAULT = 30000; // 30 seconds otherwise (save battery)
+// Ping every 5s during active dispatches so the distance bar ticks down as the
+// responder closes in. Background task uses its own, longer cadence (10s).
+const LOCATION_INTERVAL_MS = 5000;
 
-// Auto status progression thresholds (client-side Responder Journey Tracker)
-const EN_ROUTE_TRIGGER_METERS = 75;       // accepted -> en_route when this far from accept origin
-const ARRIVING_BANNER_ON_METERS = 100;    // show "Arriving..." banner when this close to scene
-const ARRIVING_BANNER_OFF_METERS = 150;   // hide banner past this (hysteresis, prevents flicker)
-const CLIENT_ARRIVED_METERS = 25;         // client-side optimistic arrived trigger (tighter than backend 100m)
+// Journey tracker: 75m from accept-origin auto-fires en_route. Arrival is
+// server-authoritative — we no longer check client-side proximity to scene.
+const EN_ROUTE_TRIGGER_METERS = 75;
+// Banner hysteresis uses the server-reported distance_meters when available.
+const ARRIVING_BANNER_ON_METERS = 100;
+const ARRIVING_BANNER_OFF_METERS = 150;
 
 export interface DispatchContextType {
   // Location Tracking
@@ -97,8 +100,10 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Auto-arrival: prevent duplicate processing of the same dispatch
   const lastAutoArrivedDispatchRef = useRef<number | null>(null);
 
-  // Track current location interval for dynamic frequency adjustments
-  const currentIntervalRef = useRef<number>(LOCATION_INTERVAL_DEFAULT);
+  // Paused because the backend rejected the last ping with 422 (off-duty).
+  // Resumes only when the responder toggles back on-duty or accepts a dispatch
+  // (both paths call startPeriodicLocationUpdates, which clears this flag).
+  const pausedFor422Ref = useRef<boolean>(false);
 
   // Journey Tracker state — per-dispatch distance to scene + which dispatch is "arriving"
   const [liveDistances, setLiveDistances] = useState<Record<number, number>>({});
@@ -174,8 +179,9 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   /**
    * Handle auto-arrival detected from a location update response.
-   * Deduplicates by dispatch_id, updates local state, shows notification + alert,
-   * and fetches full server data.
+   * Deduplicates by dispatch_id, updates local state, fires haptic + toast +
+   * system notification, and fetches the full dispatch for fields like the
+   * hospital route that aren't in the slim `active_dispatch` block.
    */
   const handleAutoArrival = useCallback((autoArrived: AutoArrivedData) => {
     if (autoArrived.dispatch_id === lastAutoArrivedDispatchRef.current) {
@@ -205,12 +211,21 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Fetch complete server data so all fields are up to date
     refreshDispatches();
 
+    // Haptic success feedback (matches the ringtone.service pattern used for
+    // other positive status changes).
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+      (err: any) => console.warn('[DispatchContext] Haptic failed:', err?.message)
+    );
+
     // Show system notification (works even if user is in another app)
     const targetDispatch = dispatchesRef.current.find(d => d.id === dispatch_id);
     const address = targetDispatch?.incident?.address;
     notificationService.showAutoArrivalNotification(dispatch_id, address);
 
-    // Show in-app alert
+    // Toast on Android; in-app alert everywhere (serves as the banner on iOS).
+    if (Platform.OS === 'android') {
+      ToastAndroid.show('You have arrived at the scene', ToastAndroid.LONG);
+    }
     Alert.alert(
       'Arrived at Incident',
       'You have been automatically marked as arrived at the incident location.',
@@ -219,31 +234,61 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [updateDispatchLocally, refreshDispatches]);
 
   /**
+   * Apply the `active_dispatch` snapshot from a location-ping response to
+   * local state. This is the authoritative source for the live distance bar.
+   */
+  const applyActiveDispatchSnapshot = useCallback(
+    (snap: ActiveDispatchSnapshot) => {
+      updateDispatchLocally(snap.id, {
+        status: snap.status,
+        distance_meters: snap.distance_meters,
+        distance_text: snap.distance_text,
+        estimated_duration_seconds: snap.estimated_duration_seconds,
+        duration_text: snap.duration_text,
+      });
+
+      setLiveDistances((prev) => {
+        if (prev[snap.id] === snap.distance_meters) return prev;
+        return { ...prev, [snap.id]: snap.distance_meters };
+      });
+
+      // Banner hysteresis off the server-reported distance.
+      if (snap.status === 'en_route' || snap.status === 'accepted') {
+        if (snap.distance_meters <= ARRIVING_BANNER_ON_METERS) {
+          setArrivingDispatchId((prev) => (prev === snap.id ? prev : snap.id));
+        } else if (snap.distance_meters > ARRIVING_BANNER_OFF_METERS) {
+          setArrivingDispatchId((prev) => (prev === snap.id ? null : prev));
+        }
+      } else {
+        setArrivingDispatchId((prev) => (prev === snap.id ? null : prev));
+      }
+    },
+    [updateDispatchLocally]
+  );
+
+  /**
    * Journey tracker evaluation — runs on every successful GPS fix.
-   * (a) Always updates liveDistances + arriving banner for UI.
-   * (b) When `canFirePosts`, evaluates 75m accept-origin geofence for auto en_route
-   *     and 25m scene geofence for client-side optimistic arrived.
+   * Handles only the accepted -> en_route 75m geofence. Arrival is now
+   * entirely server-driven (see handleAutoArrival). `canFirePosts` is false
+   * when the backend is unreachable so we don't spam status POSTs that would
+   * also fail.
    */
   const evaluateJourneyTransitions = useCallback(
     async (gps: { latitude: number; longitude: number }, canFirePosts: boolean) => {
-      let journey = activeJourneyRef.current;
+      if (!canFirePosts) return;
 
-      // Pick the dispatch to evaluate: prefer the journey's dispatch, otherwise fall back
-      // to any in-flight dispatch. This lets us evaluate arrival even when the journey
-      // entry was never captured (e.g., GPS unavailable at accept time).
+      let journey = activeJourneyRef.current;
       let dispatch = journey
         ? dispatchesRef.current.find((d) => d.id === journey!.dispatchId)
         : undefined;
       if (!dispatch) {
-        dispatch = dispatchesRef.current.find(
-          (d) => d.status === 'accepted' || d.status === 'en_route'
-        );
+        dispatch = dispatchesRef.current.find((d) => d.status === 'accepted');
       }
-      if (!dispatch) return;
+      if (!dispatch || dispatch.status !== 'accepted') return;
 
-      // Lazy-capture accept origin if the accept path couldn't get a GPS fix in time.
-      // Without this, the en_route auto-transition would never fire for this dispatch.
-      if (!journey && dispatch.status === 'accepted' && canFirePosts) {
+      // Lazy-capture accept origin if the accept path couldn't get a GPS fix
+      // in time. Without this, the en_route auto-transition never fires.
+      if (!journey) {
         const entry: journeyState.JourneyEntry = {
           dispatchId: dispatch.id,
           acceptOriginLat: gps.latitude,
@@ -262,33 +307,8 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       }
 
-      const scene = dispatch.incident
-        ? { latitude: dispatch.incident.latitude, longitude: dispatch.incident.longitude }
-        : null;
-
-      // --- UI: liveDistances + arriving banner (hysteresis) ---
-      if (scene) {
-        const distanceToScene = haversineMeters(gps, scene);
-        setLiveDistances((prev) => ({ ...prev, [dispatch!.id]: distanceToScene }));
-
-        if (dispatch.status === 'en_route' || dispatch.status === 'accepted') {
-          if (distanceToScene <= ARRIVING_BANNER_ON_METERS) {
-            setArrivingDispatchId((prev) => (prev === dispatch!.id ? prev : dispatch!.id));
-          } else if (distanceToScene > ARRIVING_BANNER_OFF_METERS) {
-            setArrivingDispatchId((prev) => (prev === dispatch!.id ? null : prev));
-          }
-        } else {
-          setArrivingDispatchId((prev) => (prev === dispatch!.id ? null : prev));
-        }
-      }
-
-      if (!canFirePosts) return;
-
-      // --- accepted -> en_route @ >= 75m from accept origin (requires journey) ---
       if (
-        journey &&
         dispatch.id === journey.dispatchId &&
-        dispatch.status === 'accepted' &&
         lastEnRouteTriggeredRef.current !== dispatch.id
       ) {
         const distFromOrigin = haversineMeters(gps, {
@@ -317,64 +337,27 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }
         }
       }
-
-      // --- accepted/en_route -> arrived @ <= 25m from scene (client-side optimistic) ---
-      // Firing from `accepted` covers the case where the responder started inside the
-      // 75m en_route geofence (common in testing) and therefore never transitioned to
-      // en_route on their own. Dedupe refs prevent this from firing twice.
-      if (
-        scene &&
-        (dispatch.status === 'en_route' || dispatch.status === 'accepted') &&
-        lastArrivedTriggeredRef.current !== dispatch.id &&
-        lastAutoArrivedDispatchRef.current !== dispatch.id
-      ) {
-        const distanceToScene = haversineMeters(gps, scene);
-        if (distanceToScene <= CLIENT_ARRIVED_METERS) {
-          lastArrivedTriggeredRef.current = dispatch.id;
-          lastAutoArrivedDispatchRef.current = dispatch.id;
-          console.log(
-            `[DispatchContext] Dispatch ${dispatch.id}: ${Math.round(distanceToScene)}m from scene, auto-firing arrived (client)`
-          );
-          const nowIso = new Date().toISOString();
-          updateDispatchLocally(dispatch.id, { status: 'arrived', arrived_at: nowIso });
-          setArrivingDispatchId((prev) => (prev === dispatch.id ? null : prev));
-          try {
-            await updateDispatchStatusHook(dispatch.id, 'arrived');
-          } catch (err: any) {
-            const status = err.response?.status;
-            if (status === 409 || status === 422) {
-              console.log(
-                '[DispatchContext] Client-arrived POST superseded by backend (already arrived):',
-                status
-              );
-            } else {
-              console.error(
-                '[DispatchContext] Client-arrived POST failed:',
-                err.response?.data || err.message
-              );
-              lastArrivedTriggeredRef.current = null;
-              lastAutoArrivedDispatchRef.current = null;
-              return;
-            }
-          }
-          if (activeJourneyRef.current?.dispatchId === dispatch.id) {
-            activeJourneyRef.current = null;
-            await journeyState.clearActiveJourney();
-          }
-        }
-      }
     },
     [updateDispatchStatusHook, updateDispatchLocally]
   );
 
   /**
-   * **FIX #2 & #4: Send current location to backend with verification**
-   * **FIX: Added 422 error recovery - sets duty status and retries**
-   * Now also: drains offline location queue on success, enqueues on network failure,
-   * and runs journey-tracker evaluations (live distance, auto en_route, client-arrived).
+   * Send current GPS fix to /responder/location and drive UI from the response.
+   *
+   * The response carries the freshest distance/ETA for the active dispatch; we
+   * apply that snapshot directly to local state so the distance bar ticks down
+   * as the responder moves. If the server signals auto_arrived on this ping,
+   * flip the UI to "arrived" immediately. On 422 (off-duty), silently pause
+   * the timer until something restarts it.
    */
   const sendLocationUpdate = useCallback(async () => {
-    let location: { latitude: number; longitude: number; timestamp?: number } | null = null;
+    if (pausedFor422Ref.current) {
+      // Timer is already cleared on 422; this guard covers the rare case where
+      // a tick fires between the 422 response and the interval clearing.
+      return;
+    }
+
+    let location: LocationUpdate | null = null;
     try {
       location = await locationService.getCurrentLocation();
     } catch (gpsError: any) {
@@ -397,11 +380,10 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     if (!location) return;
 
+    const body = locationService.buildLocationRequest(location);
+
     try {
-      const response = await dispatchService.updateLocation({
-        latitude: location.latitude,
-        longitude: location.longitude,
-      });
+      const response = await dispatchService.updateLocation(body);
 
       console.log('📍 [DispatchContext] Location update response:', response);
 
@@ -409,40 +391,29 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setIsBackendConfirmed(true);
       setLocationFailureCount(0);
 
+      // Drive the distance bar from the server snapshot.
+      if (response.active_dispatch) {
+        applyActiveDispatchSnapshot(response.active_dispatch);
+      } else if (response.active_dispatch === null) {
+        // No active dispatch — clear any stale live distance / banner.
+        setLiveDistances((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+        setArrivingDispatchId((prev) => (prev == null ? prev : null));
+      }
+
       if (response.auto_arrived) {
         handleAutoArrival(response.auto_arrived);
-      } else {
-        // Diagnostic: if we're within the backend's auto-arrival radius (100m) of an
-        // active dispatch's scene and the backend still didn't signal arrival, log it.
-        // This makes it obvious in logs when the bug is server-side.
-        const close = dispatchesRef.current.find((d) => {
-          if (!d.incident || !['accepted', 'en_route'].includes(d.status)) return false;
-          const dist = haversineMeters(
-            { latitude: location.latitude, longitude: location.longitude },
-            { latitude: d.incident.latitude, longitude: d.incident.longitude }
-          );
-          return dist <= ARRIVING_BANNER_ON_METERS;
-        });
-        if (close && lastAutoArrivedDispatchRef.current !== close.id) {
-          console.warn(
-            `⚠️ [DispatchContext] Within ${ARRIVING_BANNER_ON_METERS}m of dispatch ${close.id} scene but backend returned no auto_arrived — check backend /responder/location auto-arrival logic`
-          );
-        }
       }
 
       // Backend is reachable — drain buffered offline pings (up to 5 per tick)
       try {
         await locationQueue.drainQueue(async (p) => {
-          await dispatchService.updateLocation({
-            latitude: p.latitude,
-            longitude: p.longitude,
-          });
+          await dispatchService.updateLocation(locationService.buildLocationRequest(p));
         }, 5);
       } catch (drainErr: any) {
         console.warn('[DispatchContext] Queue drain error:', drainErr.message);
       }
 
-      // Live distance + auto-transitions (can fire POSTs — backend is reachable)
+      // en_route geofence (server is reachable — safe to fire transition POST).
       await evaluateJourneyTransitions(
         { latitude: location.latitude, longitude: location.longitude },
         true
@@ -451,42 +422,16 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const statusCode = error.response?.status;
 
       if (statusCode === 422) {
-        console.error('❌ [DispatchContext] Location rejected - responder not on duty (422)');
-
-        // **FIX: Attempt to recover by setting duty status again**
-        try {
-          console.log('[DispatchContext] Attempting to recover - setting duty status...');
-          await dispatchService.updateDutyStatus({
-            is_on_duty: true,
-            responder_status: 'idle',
-          });
-          console.log('✅ [DispatchContext] Status recovered - retrying location update');
-
-          const retryResponse = await dispatchService.updateLocation({
-            latitude: location.latitude,
-            longitude: location.longitude,
-          });
-          console.log('✅ [DispatchContext] Location update succeeded after recovery');
-          setLocationLastSent(new Date());
-          setIsBackendConfirmed(true);
-          setLocationFailureCount(0);
-
-          if (retryResponse.auto_arrived) {
-            handleAutoArrival(retryResponse.auto_arrived);
-          }
-
-          await evaluateJourneyTransitions(
-            { latitude: location.latitude, longitude: location.longitude },
-            true
-          );
-        } catch (retryError: any) {
-          console.error(
-            '❌ [DispatchContext] Failed to recover status:',
-            retryError.response?.data || retryError.message
-          );
-          setIsBackendConfirmed(false);
-          setLocationFailureCount((prev) => prev + 1);
+        // Silent pause per spec — no user-facing error. The timer stops; it
+        // resumes when the responder toggles back on-duty or accepts a
+        // dispatch (both call startPeriodicLocationUpdates).
+        console.log('[DispatchContext] 422 (off-duty) — pausing location pings silently');
+        pausedFor422Ref.current = true;
+        if (locationIntervalRef.current) {
+          clearInterval(locationIntervalRef.current);
+          locationIntervalRef.current = null;
         }
+        setIsBackendConfirmed(false);
       } else if (!error.response) {
         // Network-class error (no HTTP response) — buffer for later flush.
         console.warn('[DispatchContext] Location send offline — enqueuing ping:', error.message);
@@ -497,7 +442,8 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         });
         setIsBackendConfirmed(false);
         setLocationFailureCount((prev) => prev + 1);
-        // Still update UI from the fresh GPS fix; skip transition POSTs (they'd also fail).
+        // Still evaluate journey for the en_route geofence? No — the POST
+        // would also fail. Skip.
         await evaluateJourneyTransitions(
           { latitude: location.latitude, longitude: location.longitude },
           false
@@ -511,25 +457,21 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setLocationFailureCount((prev) => prev + 1);
       }
     }
-  }, [handleAutoArrival, evaluateJourneyTransitions]);
+  }, [handleAutoArrival, evaluateJourneyTransitions, applyActiveDispatchSnapshot]);
 
   /**
-   * **FIX #2: Start periodic foreground location updates**
-   * Interval is dynamic: 8s when en_route (for auto-arrival), 30s otherwise
+   * Start periodic foreground location updates at a flat 5s cadence. Also
+   * clears any 422 pause flag so the next tick fires.
    */
   const startPeriodicLocationUpdates = useCallback(() => {
-    const hasEnRoute = dispatchesRef.current.some(d => d.status === 'en_route');
-    const interval = hasEnRoute ? LOCATION_INTERVAL_EN_ROUTE : LOCATION_INTERVAL_DEFAULT;
+    console.log(`[DispatchContext] Starting periodic foreground location updates (${LOCATION_INTERVAL_MS}ms)`);
 
-    console.log(`[DispatchContext] Starting periodic foreground location updates (${interval}ms)`);
-
-    // Clear any existing interval
     if (locationIntervalRef.current) {
       clearInterval(locationIntervalRef.current);
     }
 
-    currentIntervalRef.current = interval;
-    locationIntervalRef.current = setInterval(sendLocationUpdate, interval);
+    pausedFor422Ref.current = false;
+    locationIntervalRef.current = setInterval(sendLocationUpdate, LOCATION_INTERVAL_MS);
   }, [sendLocationUpdate]);
 
   /**
@@ -586,18 +528,25 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         const location = await locationService.getCurrentLocation();
         if (location) {
-          const locResponse = await dispatchService.updateLocation({
-            latitude: location.latitude,
-            longitude: location.longitude,
-          });
+          const locResponse = await dispatchService.updateLocation(
+            locationService.buildLocationRequest(location)
+          );
           console.log('✅ [DispatchContext] Initial location sent:', {
             lat: location.latitude,
             lng: location.longitude,
+            accuracy: location.accuracy,
             response: JSON.stringify(locResponse),
           });
           setLocationLastSent(new Date());
           setIsBackendConfirmed(true);
           setLocationFailureCount(0);
+
+          if (locResponse.active_dispatch) {
+            applyActiveDispatchSnapshot(locResponse.active_dispatch);
+          }
+          if (locResponse.auto_arrived) {
+            handleAutoArrival(locResponse.auto_arrived);
+          }
         }
       } catch (locError: any) {
         console.error('[DispatchContext] Initial location failed:', locError.response?.status, locError.response?.data || locError.message);
@@ -666,7 +615,7 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } finally {
       setIsLoading(false);
     }
-  }, [startPolling, startPeriodicLocationUpdates, verifyDutyStatusResponse]);
+  }, [startPolling, startPeriodicLocationUpdates, verifyDutyStatusResponse, applyActiveDispatchSnapshot, handleAutoArrival]);
 
   /**
    * Stop location tracking. Called reactively when the user logs out (user === null).
@@ -880,23 +829,22 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [isTrackingActive, isBackendConfirmed]);
 
   /**
-   * Dynamic location interval — adjust frequency based on dispatch status.
-   * 8s when any dispatch is en_route (for auto-arrival detection), 30s otherwise.
+   * Auto-resume the 5s ping timer when a new non-completed dispatch arrives
+   * after we silently paused on a 422. The responder accepting a dispatch
+   * puts the backend into a state where it accepts pings again.
    */
   useEffect(() => {
-    if (!isTrackingActive || !locationIntervalRef.current) return;
+    if (!isTrackingActive) return;
+    if (!pausedFor422Ref.current) return;
 
-    const hasEnRoute = dispatches.some(d => d.status === 'en_route');
-    const newInterval = hasEnRoute ? LOCATION_INTERVAL_EN_ROUTE : LOCATION_INTERVAL_DEFAULT;
-
-    if (newInterval !== currentIntervalRef.current) {
-      console.log(`[DispatchContext] Adjusting location interval: ${currentIntervalRef.current}ms -> ${newInterval}ms`);
-      currentIntervalRef.current = newInterval;
-
-      clearInterval(locationIntervalRef.current);
-      locationIntervalRef.current = setInterval(sendLocationUpdate, newInterval);
+    const hasNonCompleted = dispatches.some((d) =>
+      ['assigned', 'accepted', 'en_route', 'arrived', 'transporting_to_hospital'].includes(d.status)
+    );
+    if (hasNonCompleted) {
+      console.log('[DispatchContext] Resuming location pings — active dispatch detected after pause');
+      startPeriodicLocationUpdates();
     }
-  }, [isTrackingActive, dispatches, sendLocationUpdate]);
+  }, [isTrackingActive, dispatches, startPeriodicLocationUpdates]);
 
   /**
    * Notification listener — bridges background location task auto-arrival to React state.
@@ -923,6 +871,14 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         lastAutoArrivedDispatchRef.current = bgDispatchId;
         updateDispatchLocally(bgDispatchId, { status: 'arrived' });
         refreshDispatches();
+
+        // Same haptic/toast treatment as the foreground path.
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+          (err: any) => console.warn('[DispatchContext] Haptic failed:', err?.message)
+        );
+        if (Platform.OS === 'android') {
+          ToastAndroid.show('You have arrived at the scene', ToastAndroid.LONG);
+        }
 
         // Banner off + journey cleared (trip is done)
         setArrivingDispatchId((prev) => (prev === bgDispatchId ? null : prev));
