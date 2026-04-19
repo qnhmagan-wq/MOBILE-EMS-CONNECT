@@ -66,11 +66,15 @@ export default function CommunityHomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Illustration */}
-        <View style={styles.illustrationContainer}>
+        {/* First Aid shortcut */}
+        <TouchableOpacity
+          style={styles.illustrationContainer}
+          onPress={() => router.push("/(tabs)/community/first-aid")}
+          activeOpacity={0.7}
+        >
           <Ionicons name="medkit" size={scale(80)} color="#FFFFFF" />
-          <Text style={styles.illustrationText}>Emergency Services</Text>
-        </View>
+          <Text style={styles.illustrationText}>First Aid</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
