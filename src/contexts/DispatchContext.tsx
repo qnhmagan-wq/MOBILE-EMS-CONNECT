@@ -28,6 +28,11 @@ import {
   requestBackgroundLocationPermissions,
   isBackgroundTrackingActive,
 } from '@/src/services/backgroundLocation.service';
+import {
+  emsdiagLog,
+  recordAutoArrived,
+  resetDiagnostics,
+} from '@/src/services/diagnostics.service';
 import { useAuth } from './AuthContext';
 
 // Ping every 5s during active dispatches so the distance bar ticks down as the
@@ -140,6 +145,29 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     dispatchesRef.current = dispatches;
   }, [dispatches]);
 
+  // Detect status transitions for EMSDIAG. Compares the previous snapshot
+  // against the current one and emits a status_transition event when any
+  // dispatch's status changes. Handles server-driven, polling-driven, and
+  // manual transitions alike — auto_arrived also emits its own richer event.
+  const lastStatusMapRef = useRef<Map<number, DispatchStatus>>(new Map());
+  useEffect(() => {
+    const prev = lastStatusMapRef.current;
+    const next = new Map<number, DispatchStatus>();
+    for (const d of dispatches) {
+      next.set(d.id, d.status);
+      const prior = prev.get(d.id);
+      if (prior && prior !== d.status) {
+        emsdiagLog('status_transition', {
+          dispatchId: d.id,
+          from: prior,
+          to: d.status,
+          trigger: 'reconcile',
+        });
+      }
+    }
+    lastStatusMapRef.current = next;
+  }, [dispatches]);
+
   /**
    * Verify and log duty status response from backend.
    * Returns true if backend confirmed on-duty, false otherwise.
@@ -192,6 +220,16 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     lastAutoArrivedDispatchRef.current = dispatch_id;
 
     console.log('[DispatchContext] Auto-arrival detected:', { dispatch_id, incident_id, arrived_at });
+
+    // Diagnostic overlay + structured log (release-safe).
+    recordAutoArrived(dispatch_id, arrived_at);
+    emsdiagLog('auto_arrived', { dispatchId: dispatch_id, arrivedAt: arrived_at });
+    emsdiagLog('status_transition', {
+      dispatchId: dispatch_id,
+      from: dispatchesRef.current.find((d) => d.id === dispatch_id)?.status ?? 'unknown',
+      to: 'arrived',
+      trigger: 'server',
+    });
 
     // Update local dispatch state immediately (server already transitioned status)
     updateDispatchLocally(dispatch_id, {
@@ -641,6 +679,10 @@ export const DispatchProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setArrivingDispatchId(null);
       setLiveDistances({});
       await journeyState.clearActiveJourney();
+
+      // Don't show the previous responder's stats to the next one.
+      resetDiagnostics();
+      lastStatusMapRef.current = new Map();
 
       console.log('[DispatchContext] Location tracking stopped');
     } catch (error: any) {

@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, Switch, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, Switch, TouchableOpacity, ActivityIndicator, Alert, TouchableWithoutFeedback } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useDispatch } from "@/src/contexts/DispatchContext";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { scale, scaleFontSize, scaleSpacing } from "@/src/utils/responsive";
 import { getDispatches } from "@/src/services/dispatch.service";
+import { useDiagTapToggle } from "@/src/hooks/useDiagTapToggle";
 
 export default function ResponderHomeScreen() {
   const { user } = useAuth();
@@ -26,6 +27,7 @@ export default function ResponderHomeScreen() {
   } = useDispatch();
 
   const [debugLoading, setDebugLoading] = useState(false);
+  const handleHeaderTap = useDiagTapToggle();
 
   const handleDebugFetch = async () => {
     setDebugLoading(true);
@@ -55,13 +57,15 @@ export default function ResponderHomeScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.content}
       >
-        <View style={styles.header}>
-          <Ionicons name="medical" size={scale(48)} color={Colors.primary} />
-          <Text style={styles.title}>EMS Connect Responder</Text>
-          {user?.name && (
-            <Text style={styles.welcomeText}>Welcome, {user.name}</Text>
-          )}
-        </View>
+        <TouchableWithoutFeedback onPress={handleHeaderTap}>
+          <View style={styles.header}>
+            <Ionicons name="medical" size={scale(48)} color={Colors.primary} />
+            <Text style={styles.title}>EMS Connect Responder</Text>
+            {user?.name && (
+              <Text style={styles.welcomeText}>Welcome, {user.name}</Text>
+            )}
+          </View>
+        </TouchableWithoutFeedback>
 
         {/* Error Display */}
         {error && (

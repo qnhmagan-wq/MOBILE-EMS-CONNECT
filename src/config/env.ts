@@ -21,14 +21,24 @@ const getAgoraAppId = (): string => {
   return PRODUCTION_AGORA_APP_ID;
 };
 
+// Field-test diagnostic overlay. Gated on an explicit env flag so production
+// store builds never install the 5-tap handler. Dev builds get it for free
+// via __DEV__ so no one has to fiddle with .env locally.
+const getDiagToggleEnabled = (): boolean => {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) return true;
+  return process.env.EXPO_PUBLIC_DIAG_TOGGLE_ENABLED === 'true';
+};
+
 const ENV = {
   API_BASE_URL: getApiBaseUrl(),
   AGORA_APP_ID: getAgoraAppId(),
+  DIAG_TOGGLE_ENABLED: getDiagToggleEnabled(),
 };
 
 // Log environment configuration on load
 console.log('[ENV CONFIG] API_BASE_URL:', ENV.API_BASE_URL);
 console.log('[ENV CONFIG] Environment:', typeof __DEV__ !== 'undefined' && __DEV__ ? 'development' : 'production');
+console.log('[ENV CONFIG] DIAG_TOGGLE_ENABLED:', ENV.DIAG_TOGGLE_ENABLED);
 
 export default ENV;
 

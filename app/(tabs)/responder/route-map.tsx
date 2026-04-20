@@ -35,6 +35,7 @@ import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import * as mapsService from '@/src/services/maps.service';
 import { formatDistance, haversineMeters } from "@/src/utils/distance";
+import { emsdiagLog } from "@/src/services/diagnostics.service";
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number =>
   haversineMeters({ latitude: lat1, longitude: lon1 }, { latitude: lat2, longitude: lon2 });
@@ -264,6 +265,25 @@ export default function RouteMapScreen() {
   // CTA on this screen now swaps to "Going to Hospital" once status='arrived'
   // (see the info-panel block below). The responder can tap to start
   // transport, or open the Dispatch Details tab to submit pre-arrival info.
+
+  // Emit EMSDIAG when the CTA label changes so field tests can confirm the
+  // UI actually swapped on auto-arrival (not just the server state).
+  useEffect(() => {
+    const status = dispatch?.status;
+    if (!status) return;
+    const label =
+      status === 'arrived'
+        ? 'Going to Hospital'
+        : status === 'transporting_to_hospital'
+        ? 'Continue to Hospital'
+        : "I've Arrived";
+    emsdiagLog('button_rendered', {
+      screen: 'route-map',
+      label,
+      dispatchStatus: status,
+      dispatchId: dispatch?.id,
+    });
+  }, [dispatch?.status, dispatch?.id]);
 
   /**
    * Handle "I've Arrived" button press

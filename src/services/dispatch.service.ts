@@ -28,6 +28,11 @@ import {
   IncidentReportRequest,
   IncidentReportResponse,
 } from '@/src/types/dispatch.types';
+import {
+  emsdiagLog,
+  recordPingFailure,
+  recordPingSuccess,
+} from './diagnostics.service';
 
 /**
  * Update responder's current location
@@ -36,22 +41,79 @@ import {
 export const updateLocation = async (
   location: LocationUpdateRequest
 ): Promise<LocationUpdateResponse> => {
+  const accuracyPresent = Object.prototype.hasOwnProperty.call(location, 'accuracy');
+  const accuracyValue = typeof location.accuracy === 'number' ? location.accuracy : null;
+
+  // Dev-only so QA can grep for `[LOCATION PING]` and confirm accuracy is
+  // present with a real OS-reported number. Gated on __DEV__ because every
+  // responder pings every 5 s — this would flood production logs.
+  if (__DEV__) {
+    console.log('[LOCATION PING]', {
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracy: location.accuracy,
+      accuracyKeyPresent: accuracyPresent,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   try {
-    // Dev-only so QA can grep for `[LOCATION PING]` and confirm accuracy is
-    // present with a real OS-reported number. Gated on __DEV__ because every
-    // responder pings every 5 s — this would flood production logs.
-    if (__DEV__) {
-      console.log('[LOCATION PING]', {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        accuracy: location.accuracy,
-        accuracyKeyPresent: Object.prototype.hasOwnProperty.call(location, 'accuracy'),
-        timestamp: new Date().toISOString(),
+    const response = await api.post<LocationUpdateResponse>('/responder/location', location);
+    const data = response.data;
+    const active = data.active_dispatch ?? null;
+
+    recordPingSuccess({
+      accuracy: accuracyValue,
+      accuracyPresent,
+      dispatchId: active?.id ?? null,
+      dispatchStatus: active?.status ?? null,
+      distanceMeters: active?.distance_meters ?? null,
+      etaSeconds: active?.estimated_duration_seconds ?? null,
+      httpStatus: response.status,
+    });
+
+    // Single-line JSON log — release-safe, low volume (one per ping).
+    emsdiagLog('location_ping', {
+      status: 'OK',
+      accuracy: accuracyValue,
+      accuracyPresent,
+      httpStatus: response.status,
+      responseDistance: active?.distance_meters ?? null,
+      dispatchStatus: active?.status ?? null,
+      autoArrived: Boolean(data.auto_arrived),
+    });
+
+    return data;
+  } catch (error: any) {
+    const httpStatus = error.response?.status ?? null;
+    const shortMessage =
+      httpStatus != null
+        ? `${httpStatus} ${(error.response?.data?.message ?? error.message ?? '').toString().slice(0, 60)}`.trim()
+        : `network ${(error.message ?? '').toString().slice(0, 60)}`.trim();
+
+    recordPingFailure({
+      accuracy: accuracyValue,
+      accuracyPresent,
+      httpStatus,
+      shortMessage,
+    });
+
+    emsdiagLog('location_ping', {
+      status: httpStatus == null ? 'NETWORK' : 'ERROR',
+      accuracy: accuracyValue,
+      accuracyPresent,
+      httpStatus,
+      message: (error.response?.data?.message ?? error.message ?? '').toString().slice(0, 200),
+    });
+
+    if (httpStatus != null && httpStatus >= 500) {
+      emsdiagLog('error', {
+        kind: `http_${httpStatus}`,
+        path: '/api/responder/location',
+        message: (error.response?.data?.message ?? error.message ?? '').toString().slice(0, 200),
       });
     }
-    const response = await api.post<LocationUpdateResponse>('/responder/location', location);
-    return response.data;
-  } catch (error: any) {
+
     console.error('[Dispatch Service] Update location error:', error.response?.data || error.message);
     throw error;
   }

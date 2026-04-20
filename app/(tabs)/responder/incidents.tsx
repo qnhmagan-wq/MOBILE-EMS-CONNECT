@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, RefreshControl } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, RefreshControl, TouchableWithoutFeedback } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useDispatch } from "@/src/contexts/DispatchContext";
@@ -7,6 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, BorderRadius, FontSizes } from "@/src/config/theme";
 import { Dispatch, DispatchStatus } from "@/src/types/dispatch.types";
 import { formatDistance } from "@/src/utils/distance";
+import { useDiagTapToggle } from "@/src/hooks/useDiagTapToggle";
 import { Linking } from "react-native";
 
 export default function ResponderIncidentsScreen() {
@@ -15,6 +16,7 @@ export default function ResponderIncidentsScreen() {
   const { activeDispatches, isTrackingActive, updateDispatchStatus, refreshDispatches, lastPollTime, lastPollResult, liveDistances } = useDispatch();
   const [status, setStatus] = React.useState<'Available' | 'Busy'>('Available');
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const handleHeaderTap = useDiagTapToggle();
 
   const handleRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
@@ -129,9 +131,11 @@ export default function ResponderIncidentsScreen() {
       {/* Header Banner - Dark Red */}
       <View style={styles.headerBanner}>
         <View style={styles.headerLeft}>
-          <View style={styles.logoContainer}>
-            <Ionicons name="medical" size={32} color={Colors.textWhite} />
-          </View>
+          <TouchableWithoutFeedback onPress={handleHeaderTap}>
+            <View style={styles.logoContainer}>
+              <Ionicons name="medical" size={32} color={Colors.textWhite} />
+            </View>
+          </TouchableWithoutFeedback>
           <View style={styles.welcomeContainer}>
             <Text style={styles.welcomeText}>WELCOME, {user?.name?.toUpperCase() || 'RESPONDER'}</Text>
             <TouchableOpacity

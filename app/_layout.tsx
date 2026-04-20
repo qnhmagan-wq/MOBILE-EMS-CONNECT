@@ -5,6 +5,8 @@ import { DispatchProvider } from "@/src/contexts/DispatchContext";
 import { View, ActivityIndicator, StyleSheet, Image } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import { Colors } from "@/src/config/theme";
+import { DiagnosticOverlay } from "@/src/components/DiagnosticOverlay";
+import { loadOverlayVisibility } from "@/src/services/diagnostics.service";
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -35,6 +37,12 @@ function RootLayoutNav() {
 
     prepare();
   }, [isLoading]);
+
+  // Rehydrate the persisted diagnostic-overlay toggle once on app start so the
+  // overlay re-appears after a force-quit if the tester had it on.
+  useEffect(() => {
+    loadOverlayVisibility();
+  }, []);
 
   useEffect(() => {
     if (!appIsReady || isLoading) return;
@@ -72,10 +80,14 @@ function RootLayoutNav() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="auth" />
-      <Stack.Screen name="(tabs)" />
-    </Stack>
+    <>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="auth" />
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+      {/* Field-test overlay. Inert unless DIAG_TOGGLE_ENABLED + tester toggled on. */}
+      <DiagnosticOverlay />
+    </>
   );
 }
 
