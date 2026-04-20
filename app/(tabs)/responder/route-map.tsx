@@ -36,6 +36,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import * as mapsService from '@/src/services/maps.service';
 import { formatDistance, haversineMeters } from "@/src/utils/distance";
 import { emsdiagLog } from "@/src/services/diagnostics.service";
+import { isValidCoordinate } from "@/src/utils/coordinates";
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number =>
   haversineMeters({ latitude: lat1, longitude: lon1 }, { latitude: lat2, longitude: lon2 });
@@ -285,6 +286,34 @@ export default function RouteMapScreen() {
     });
   }, [dispatch?.status, dispatch?.id]);
 
+  // [MAP DEBUG] Diagnostic log for incident pin visibility regression. Fires
+  // whenever the incident coords or the responder's GPS change — gives a
+  // grep-friendly trail when the red pin fails to render on device.
+  useEffect(() => {
+    console.log('[MAP DEBUG] dispatch incident coords:', {
+      incidentId,
+      dispatchId,
+      dispatchStatus: dispatch?.status,
+      incidentLat: incident?.latitude,
+      incidentLon: incident?.longitude,
+      incidentLatType: typeof incident?.latitude,
+      incidentLonType: typeof incident?.longitude,
+      responderLat: responderLocation?.coords.latitude,
+      responderLon: responderLocation?.coords.longitude,
+      distanceMeters: dispatch?.distance_meters,
+    });
+  }, [
+    incidentId,
+    dispatchId,
+    stableIncidentLat,
+    stableIncidentLng,
+    responderLocation,
+    dispatch?.status,
+    dispatch?.distance_meters,
+    incident?.latitude,
+    incident?.longitude,
+  ]);
+
   /**
    * Handle "I've Arrived" button press
    * Includes defensive status check — if dispatch is still 'accepted' (en_route
@@ -485,17 +514,38 @@ export default function RouteMapScreen() {
           showsUserLocation={true}
           showsMyLocationButton={true}
         >
-          {/* Incident Location Marker */}
-          <Marker
-            coordinate={{
-              latitude: incident.latitude,
-              longitude: incident.longitude,
-            }}
-            title="Incident Location"
-            description={incident.address}
-            pinColor={Colors.danger}
-            tracksViewChanges={false}
-          />
+          {/* Incident Location Marker.
+              - `pinColor="red"` uses a NAMED hue. Passing a hex like
+                Colors.danger ('#FF3B30') to react-native-maps 1.20.1 on
+                Android can silently render an invisible pin — the named
+                palette is the stable contract.
+              - `zIndex={9999}` guarantees the pin renders on top of the
+                responder's blue-dot, `showsUserLocation` puck, and any
+                polyline under it.
+              - Coords are coerced to Number so Laravel DECIMAL columns
+                returned as strings don't poison the coordinate prop. */}
+          {(() => {
+            const incidentLat = Number(incident.latitude);
+            const incidentLon = Number(incident.longitude);
+            if (!isValidCoordinate({ latitude: incidentLat, longitude: incidentLon })) {
+              console.warn('[MAP DEBUG] Incident coords invalid — skipping marker:', {
+                raw: { lat: incident.latitude, lon: incident.longitude },
+                coerced: { lat: incidentLat, lon: incidentLon },
+              });
+              return null;
+            }
+            return (
+              <Marker
+                identifier={`incident-${incidentId}`}
+                coordinate={{ latitude: incidentLat, longitude: incidentLon }}
+                title="Incident Location"
+                description={incident.address}
+                pinColor="red"
+                zIndex={9999}
+                tracksViewChanges={false}
+              />
+            );
+          })()}
 
           {/* Route Polyline - Google Directions API (memoized to prevent re-renders) */}
           {memoizedRouteCoordinates.length > 0 && (

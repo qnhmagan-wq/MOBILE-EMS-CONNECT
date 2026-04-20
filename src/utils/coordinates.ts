@@ -99,6 +99,13 @@ export const areValidPolylineCoordinates = (
  * pin stays independently tappable instead of hiding under the top one.
  * Deterministic — same input produces the same output, so markers don't
  * shuffle between renders.
+ *
+ * INVARIANT: returns an array of the SAME LENGTH, in the SAME ORDER as
+ * the input. Callers render markers by mapping the output, and a dropped
+ * element would vanish from the map entirely — which is how the
+ * route-map regression manifested before this guard existed. Elements
+ * with non-numeric coordinates are passed through unchanged instead of
+ * being filtered or causing `.toFixed` to throw.
  */
 export const applyJitterForOverlaps = <
   T extends { id: number; latitude: number; longitude: number }
@@ -107,9 +114,18 @@ export const applyJitterForOverlaps = <
 ): T[] => {
   if (items.length < 2) return items;
 
+  const hasNumericCoords = (it: T): boolean =>
+    typeof it.latitude === 'number' &&
+    typeof it.longitude === 'number' &&
+    Number.isFinite(it.latitude) &&
+    Number.isFinite(it.longitude);
+
   // Group by coordinate rounded to 6 decimals (~10 cm — below GPS accuracy).
+  // Items without usable coords aren't grouped (they can't overlap anyway),
+  // but they still flow through the output untouched.
   const grouped = new Map<string, T[]>();
   for (const item of items) {
+    if (!hasNumericCoords(item)) continue;
     const key = `${item.latitude.toFixed(6)},${item.longitude.toFixed(6)}`;
     const bucket = grouped.get(key);
     if (bucket) bucket.push(item);
@@ -120,6 +136,7 @@ export const applyJitterForOverlaps = <
   const metersPerLatDegree = 111_111;
 
   return items.map((item) => {
+    if (!hasNumericCoords(item)) return item;
     const key = `${item.latitude.toFixed(6)},${item.longitude.toFixed(6)}`;
     const group = grouped.get(key);
     if (!group || group.length === 1) return item;

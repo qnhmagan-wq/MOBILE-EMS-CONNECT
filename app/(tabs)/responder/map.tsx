@@ -28,20 +28,37 @@ export default function MapOverviewScreen() {
   // Offset markers that share identical coordinates on a ~6m ring so a second
   // report from the same spot doesn't hide under the first one. Keyed by
   // dispatch id, so pins remain independently tappable.
-  const dispatchMarkers = useMemo(
-    () =>
-      applyJitterForOverlaps(
-        activeDispatches
-          .filter((d) => d.incident)
-          .map((d) => ({
-            id: d.id,
-            latitude: d.incident.latitude,
-            longitude: d.incident.longitude,
-            dispatch: d,
-          }))
-      ),
-    [activeDispatches]
-  );
+  //
+  // Coords are coerced to Number up front so Laravel DECIMAL-as-string values
+  // don't cause `.toFixed` to throw inside `applyJitterForOverlaps`. Dispatches
+  // without a valid incident payload are filtered out before jitter — which is
+  // safe because the jitter invariant is "never drop input elements", not "never
+  // reject bad upstream data".
+  const dispatchMarkers = useMemo(() => {
+    const before = activeDispatches
+      .filter((d) => d.incident)
+      .map((d) => ({
+        id: d.id,
+        latitude: Number(d.incident.latitude),
+        longitude: Number(d.incident.longitude),
+        dispatch: d,
+      }));
+    const jittered = applyJitterForOverlaps(before);
+    // [MAP DEBUG] Diagnostic log for incident pin regression. The jitter
+    // helper's documented invariant is that output length === input length;
+    // logging both sides makes it trivial to confirm in logcat / Xcode console.
+    const summarize = (arr: typeof before) =>
+      arr.map((m) => ({ id: m.id, lat: m.latitude, lon: m.longitude }));
+    console.log('[MAP DEBUG] markers before jitter:', JSON.stringify(summarize(before)));
+    console.log('[MAP DEBUG] markers after jitter:', JSON.stringify(summarize(jittered)));
+    if (jittered.length !== before.length) {
+      console.error(
+        '[MAP DEBUG] JITTER DROPPED ELEMENTS — this violates the invariant',
+        { beforeLen: before.length, afterLen: jittered.length }
+      );
+    }
+    return jittered;
+  }, [activeDispatches]);
 
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [stations, setStations] = useState<Station[]>([]);
@@ -203,12 +220,16 @@ export default function MapOverviewScreen() {
           showsCompass={true}
           showsTraffic={false}
         >
-          {/* Active Incident Markers (jittered when stacked at identical coords) */}
+          {/* Active Incident Markers (jittered when stacked at identical coords).
+              Named `pinColor="red"` + high `zIndex` — see route-map.tsx for
+              the full reasoning; same Android rendering gotcha applies here. */}
           {dispatchMarkers.map(({ id, latitude, longitude, dispatch }) => (
             <Marker
               key={`dispatch-${id}`}
+              identifier={`dispatch-${id}`}
               coordinate={{ latitude, longitude }}
-              pinColor={Colors.danger}
+              pinColor="red"
+              zIndex={9999}
               title={`${dispatch.incident.type.charAt(0).toUpperCase() + dispatch.incident.type.slice(1).replace('_', ' ')} Emergency`}
               description={`${dispatch.incident.address}\nStatus: ${dispatch.status.toUpperCase().replace('_', ' ')}`}
               tracksViewChanges={false}
