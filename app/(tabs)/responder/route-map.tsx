@@ -9,7 +9,7 @@
  * - Live responder location tracking (updates every 5 seconds)
  * - Auto-update dispatch status to "en_route"
  * - Incident info panel
- * - "I've Arrived" button to mark arrival
+ * - Automatic arrival detection (server-driven geofence via DispatchContext)
  * - Distance and ETA display (placeholder for Google Directions API)
  */
 
@@ -277,7 +277,7 @@ export default function RouteMapScreen() {
         ? 'Going to Hospital'
         : status === 'transporting_to_hospital'
         ? 'Continue to Hospital'
-        : "I've Arrived";
+        : 'Awaiting Auto-Arrival';
     emsdiagLog('button_rendered', {
       screen: 'route-map',
       label,
@@ -313,93 +313,6 @@ export default function RouteMapScreen() {
     incident?.latitude,
     incident?.longitude,
   ]);
-
-  /**
-   * Handle "I've Arrived" button press
-   * Includes defensive status check — if dispatch is still 'accepted' (en_route
-   * transition may have silently failed), auto-recovers by updating to en_route first.
-   */
-  const handleArrived = async () => {
-    if (!dispatchId) return;
-
-    Alert.alert(
-      'Confirm Arrival',
-      'Have you arrived at the incident location?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: "Yes, I've Arrived",
-          onPress: async () => {
-            setIsUpdatingStatus(true);
-            try {
-              // Defensive: check current dispatch status from context
-              const currentDispatch = dispatches.find(d => d.id === dispatchId);
-              const currentStatus = currentDispatch?.status;
-
-              if (currentStatus === 'arrived') {
-                // Already arrived — just go back
-                Alert.alert('Already Arrived', 'You have already been marked as arrived.', [
-                  { text: 'OK', onPress: () => router.replace(
-                    `/(tabs)/responder/incident-details?id=${incidentId}&dispatchId=${dispatchId}`
-                  ) },
-                ]);
-                return;
-              }
-
-              if (currentStatus && !['accepted', 'en_route'].includes(currentStatus)) {
-                // Unexpected status — can't transition to arrived
-                Alert.alert(
-                  'Status Error',
-                  `Cannot mark as arrived — dispatch is currently "${currentStatus}". Please go back and check dispatch details.`,
-                  [{ text: 'OK' }]
-                );
-                return;
-              }
-
-              if (currentStatus === 'accepted') {
-                // en_route transition was missed — auto-recover
-                console.log('[Route Map] Dispatch still in accepted status, auto-recovering to en_route first...');
-                try {
-                  await updateDispatchStatus(dispatchId, 'en_route');
-                  // Brief delay so backend processes the transition
-                  await new Promise(resolve => setTimeout(resolve, 300));
-                } catch (enRouteErr: any) {
-                  console.error('[Route Map] Failed to auto-recover en_route:', enRouteErr);
-                  // Continue trying arrived anyway — backend might allow it
-                }
-              }
-
-              await updateDispatchStatus(dispatchId, 'arrived');
-              console.log('[Route Map] Status updated to arrived');
-              Alert.alert(
-                'Arrived',
-                'You have marked yourself as arrived at the incident location.',
-                [
-                  {
-                    text: 'OK',
-                    onPress: () => router.replace(
-                      `/(tabs)/responder/incident-details?id=${incidentId}&dispatchId=${dispatchId}`
-                    ),
-                  },
-                ]
-              );
-            } catch (err: any) {
-              console.error('[Route Map] Failed to update arrival status:', err);
-              const backendMsg = err.response?.data?.message;
-              Alert.alert(
-                'Error',
-                backendMsg
-                  ? `Failed to update arrival status: ${backendMsg}`
-                  : 'Failed to update arrival status. Please try again.'
-              );
-            } finally {
-              setIsUpdatingStatus(false);
-            }
-          },
-        },
-      ]
-    );
-  };
 
   /**
    * Transition to transporting_to_hospital from the arrived state. Matches
@@ -683,20 +596,15 @@ export default function RouteMapScreen() {
                 <Text style={styles.arrivedButtonText}>Continue to Hospital</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity
-                style={[styles.arrivedButton, isUpdatingStatus && styles.arrivedButtonDisabled]}
-                onPress={handleArrived}
-                disabled={isUpdatingStatus}
-              >
-                {isUpdatingStatus ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="checkmark-circle" size={24} color="#fff" />
-                    <Text style={styles.arrivedButtonText}>I&apos;ve Arrived</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              // Arrival is automatic — the server-driven geofence
+              // (DispatchContext.handleAutoArrival) flips status to 'arrived'
+              // once the responder enters the incident radius. No manual button.
+              <View style={styles.autoArrivalNotice}>
+                <Ionicons name="navigate" size={20} color={Colors.primary} />
+                <Text style={styles.autoArrivalNoticeText}>
+                  You&apos;ll be marked as arrived automatically when you reach the scene.
+                </Text>
+              </View>
             )}
           </ScrollView>
         </View>
@@ -862,14 +770,21 @@ const styles = StyleSheet.create({
   statusBadgeTransporting: {
     backgroundColor: '#3B82F6',
   },
-  arrivedButton: {
-    backgroundColor: Colors.success,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
+  autoArrivalNotice: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: Spacing.sm,
+    padding: Spacing.md,
+    backgroundColor: '#F3F4F6',
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  autoArrivalNoticeText: {
+    flex: 1,
+    color: Colors.textSecondary,
+    fontSize: FontSizes.sm,
+    fontWeight: '500',
   },
   arrivedButtonDisabled: {
     opacity: 0.6,

@@ -114,9 +114,9 @@ export default function ResponderIncidentDetailsScreen() {
           { status: 'en_route' as DispatchStatus, label: 'On My Way', icon: 'car', color: '#F59E0B' },
         ];
       case 'en_route':
-        return [
-          { status: 'arrived' as DispatchStatus, label: "I've Arrived", icon: 'location', color: '#8B5CF6' },
-        ];
+        // Arrival is handled automatically by the server-driven geofence
+        // (see DispatchContext.handleAutoArrival). No manual action needed.
+        return [];
       case 'arrived':
         return [
           { status: 'transporting_to_hospital' as DispatchStatus, label: 'Going to Hospital', icon: 'medical', color: '#3B82F6', isPrimary: true },
